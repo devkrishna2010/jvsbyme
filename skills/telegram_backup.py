@@ -363,7 +363,7 @@ def install_windows_startup() -> Tuple[bool, str]:
 
     vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "{ROOT}"
-WshShell.Run """{python_exe}"" ""{main_py}"" --wake", 1, False
+WshShell.Run """{python_exe}"" ""{main_py}""", 1, False
 '''
     try:
         with open(vbs_path, "w", encoding="utf-8") as f:
