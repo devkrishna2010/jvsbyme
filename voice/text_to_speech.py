@@ -103,6 +103,17 @@ class JarvisTTS:
                 continue
             chunk_data, sr = self._synthesize_single_phrase(sentence, profile)
             sample_rate = sr
+
+            # Smooth 4ms micro fade-in/out to prevent boundary clicks
+            fade_len = int(0.004 * sr)
+            if len(chunk_data) > fade_len * 2:
+                chunk_f = chunk_data.astype(np.float32)
+                f_in = np.linspace(0.0, 1.0, fade_len)
+                f_out = np.linspace(1.0, 0.0, fade_len)
+                chunk_f[:fade_len] *= f_in
+                chunk_f[-fade_len:] *= f_out
+                chunk_data = chunk_f.astype(chunk_data.dtype)
+
             collected_audio.append(chunk_data)
 
             # Insert configurable sentence silence pause between parts
