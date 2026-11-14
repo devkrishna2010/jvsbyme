@@ -352,18 +352,20 @@ def stop_passcode_listener():
 
 
 def install_windows_startup() -> Tuple[bool, str]:
-    """Installs VBScript launcher into Windows User Startup folder."""
+    """Installs VBScript launcher into Windows User Startup folder using pythonw for 0 console window."""
     startup_dir = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
     if not os.path.isdir(startup_dir):
         return False, "Windows Startup directory could not be located."
 
     vbs_path = os.path.join(startup_dir, "LaunchJarvis.vbs")
-    python_exe = os.path.join(ROOT, "venv", "Scripts", "python.exe")
+    pythonw_exe = os.path.join(ROOT, "venv", "Scripts", "pythonw.exe")
+    if not os.path.isfile(pythonw_exe):
+        pythonw_exe = os.path.join(ROOT, "venv", "Scripts", "python.exe")
     main_py = os.path.join(ROOT, "main.py")
 
     vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "{ROOT}"
-WshShell.Run """{python_exe}"" ""{main_py}""", 1, False
+WshShell.Run """{pythonw_exe}"" ""{main_py}""", 0, False
 '''
     try:
         with open(vbs_path, "w", encoding="utf-8") as f:
