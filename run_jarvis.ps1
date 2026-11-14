@@ -1,4 +1,4 @@
-﻿# J.A.R.V.I.S. V2 — PowerShell Native Launcher
+# J.A.R.V.I.S. V2 — PowerShell Native Launcher
 $ErrorActionPreference = "Continue"
 Set-Location -Path $PSScriptRoot
 $Host.UI.RawUI.WindowTitle = "J.A.R.V.I.S. V2 — Stark Tactical Assistant"
@@ -13,3 +13,4 @@ if (Test-Path $VenvPython) {
 } else {
     python $MainScript @args
 }
+

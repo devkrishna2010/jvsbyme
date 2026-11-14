@@ -141,13 +141,31 @@ class AudioProcessor:
         env = (np.sin(2 * np.pi * t) ** 2) * np.exp(-3.5 * t)
         return filtered * env * intensity
 
-    def master_limiter(self, signal: np.ndarray, ceiling: float = 0.96) -> np.ndarray:
-        """Soft-knee limiter to prevent any distortion or clipping."""
+    def _apply_dynamic_compression(self, audio: np.ndarray, sr: int, drive: float = 2.2) -> np.ndarray:
+        """
+        Studio broadcast vocal compression / automatic loudness leveling.
+        Elevates dialogue body and quiet syllables up to authoritative Stark volume.
+        """
+        # Smooth RMS envelope follower
+        abs_sig = np.abs(audio)
+        sos_env = butter(1, 15.0, 'lowpass', fs=sr, output='sos')
+        env = sosfilt(sos_env, abs_sig)
+        env = np.maximum(env, 0.015)
+
+        # Dynamic soft-knee compression transfer curve
+        gain = 1.0 / (env ** 0.38)
+        gain = np.clip(gain, 0.8, 3.5)
+
+        compressed = audio * gain * drive
+        return compressed
+
+    def master_limiter(self, signal: np.ndarray, ceiling: float = 0.98) -> np.ndarray:
+        """Transparent soft-knee broadcast limiter to maximize volume without clipping."""
         peak = np.max(np.abs(signal))
         if peak < 1e-5:
             return signal
 
-        knee = 0.82 * ceiling
+        knee = 0.88 * ceiling
         out = signal.copy()
         mask = np.abs(out) > knee
         if np.any(mask):
@@ -165,12 +183,13 @@ class AudioProcessor:
         profile: VoiceProfile
     ) -> Tuple[np.ndarray, int]:
         """
-        Complete processing chain:
+        Complete supercharged processing chain:
         1. Sub-octave subwoofer generator (heavy chest-thump bass)
-        2. Multi-band warm EQ
-        3. Human breath intake
-        4. Malibu lab stereo echo + wide surround
-        5. Anti-clipping limiter with zero volume fade
+        2. Vocal presence boost (clarity in room acoustics)
+        3. Studio dynamic range compression (authoritative loudness)
+        4. Human breath intake
+        5. Malibu lab stereo echo + wide surround
+        6. Master broadcast limiter at full volume
         """
         if raw_audio.dtype == np.int16:
             audio_f = raw_audio.astype(np.float32) / 32768.0
@@ -183,39 +202,48 @@ class AudioProcessor:
         # Clean DC and ultrasonic hash
         cleaned = self._apply_cleanup(audio_f, sr)
 
-        # 1. HEAVY SUBWOOFER BASS (Sub-octave chest rumble)
-        sub_rumble = self._generate_subharmonic_rumble(cleaned, sr, mix_gain=0.48)
+        # 1. Dynamic Broadcast Compression (lifts average RMS loudness)
+        boosted = self._apply_dynamic_compression(cleaned, sr, drive=2.4)
+
+        # 2. Vocal Presence Boost (+3.5 dB at 2.2 kHz for speech intelligibility)
+        sos_presence = butter(2, [1400.0, 3600.0], 'bandpass', fs=sr, output='sos')
+        presence = sosfilt(sos_presence, boosted) * 0.45
+        boosted_presence = boosted + presence
+
+        # 3. HEAVY SUBWOOFER BASS (Sub-octave chest rumble)
+        sub_rumble = self._generate_subharmonic_rumble(boosted_presence, sr, mix_gain=0.42)
         
-        # 2. Warm low-mid EQ boost (+4dB at 110-180Hz)
-        sos_warm = butter(2, [100.0, 190.0], 'bandpass', fs=sr, output='sos')
-        warmth = sosfilt(sos_warm, cleaned) * 1.5
+        # 4. Warm low-mid EQ boost (+3.5dB at 110-185Hz)
+        sos_warm = butter(2, [105.0, 185.0], 'bandpass', fs=sr, output='sos')
+        warmth = sosfilt(sos_warm, boosted_presence) * 0.50
 
         # Sum core voice + subwoofer rumble + warmth
-        bassy_voice = cleaned + sub_rumble + warmth
+        bassy_voice = boosted_presence + sub_rumble + warmth
 
-        # 3. Organic Human Breath / Polite Throat Clear intake at beginning
+        # 5. Organic Human Breath / Polite Throat Clear intake at beginning
         if profile.add_breath:
-            # 1 in 6 chance of polite human throat-clear, otherwise natural breath intake
             if np.random.rand() < 0.16:
-                human_cue = self.generate_throat_clear(sr, duration_sec=0.22, intensity=0.14)
+                human_cue = self.generate_throat_clear(sr, duration_sec=0.20, intensity=0.18)
             else:
-                human_cue = self.generate_human_breath(sr, duration_sec=0.20, intensity=0.16)
+                human_cue = self.generate_human_breath(sr, duration_sec=0.18, intensity=0.18)
             cross = int(0.04 * sr)
             if len(bassy_voice) > cross:
                 bassy_voice = np.concatenate([human_cue[:-cross], bassy_voice])
 
-        # 4. Malibu workshop stereo echo & wide 3D surround
-        echo_lvl = 0.26 if profile.name == "cinematic" else 0.14
-        spread   = 0.48 if profile.name == "cinematic" else 0.28
+        # 6. Malibu workshop stereo echo & wide 3D surround
+        echo_lvl = 0.22 if profile.name == "cinematic" else 0.12
+        spread   = 0.45 if profile.name == "cinematic" else 0.25
         left_ch, right_ch = self._apply_workshop_echo_and_surround(
             bassy_voice, sr, echo_level=echo_lvl, spread=spread
         )
 
-        # 5. Master gain and zero-distortion limiter
-        left_master = self.master_limiter(left_ch * profile.master_gain, ceiling=profile.limiter_ceiling)
-        right_master = self.master_limiter(right_ch * profile.master_gain, ceiling=profile.limiter_ceiling)
+        # 7. Master broadcast loudness limiter
+        master_gain = getattr(profile, "master_gain", 1.8) * 1.6
+        ceiling = getattr(profile, "limiter_ceiling", 0.98)
+        left_master = self.master_limiter(left_ch * master_gain, ceiling=ceiling)
+        right_master = self.master_limiter(right_ch * master_gain, ceiling=ceiling)
 
-        # Convert to 16-bit PCM stereo
+        # Convert to 16-bit PCM stereo at full unclipped dynamic range
         pcm_l = (left_master * 32767.0).clip(-32768, 32767).astype(np.int16)
         pcm_r = (right_master * 32767.0).clip(-32768, 32767).astype(np.int16)
 
