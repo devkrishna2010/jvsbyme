@@ -1,7 +1,8 @@
 """
-J.A.R.V.I.S. — Voice Output
+J.A.R.V.I.S. V2 — Voice Output & Barge-In Audio Controller
 Bridges core assistant operations with the cinematic 3-layer TTS engine.
 Supports styles: cinematic, normal, night, witty, alert.
+Satisfies Section 6 (Barge-in voice interruption).
 """
 
 import os
@@ -15,6 +16,7 @@ import config
 
 _tts_instance: Optional[JarvisTTS] = None
 _tts_lock = threading.Lock()
+_is_speaking = False
 
 
 def get_tts() -> JarvisTTS:
@@ -25,6 +27,19 @@ def get_tts() -> JarvisTTS:
             if _tts_instance is None:
                 _tts_instance = JarvisTTS(use_cache=config.USE_AUDIO_CACHE)
     return _tts_instance
+
+
+def is_currently_speaking() -> bool:
+    """Returns True if J.A.R.V.I.S. is currently producing voice output."""
+    return _is_speaking
+
+
+def stop_speaking():
+    """Immediately terminates ongoing speech playback (Barge-in)."""
+    global _is_speaking
+    _is_speaking = False
+    tts = get_tts()
+    tts.stop_playback()
 
 
 def speak(
@@ -44,6 +59,7 @@ def speak(
     Returns:
     - Path to generated WAV file.
     """
+    global _is_speaking
     if not config.ENABLE_VOICE_OUTPUT:
         print(f"[{config.JARVIS_NAME}]: {text}")
         return ""
@@ -58,7 +74,12 @@ def speak(
     )
 
     def _play_worker():
-        tts.play(wav_path)
+        global _is_speaking
+        try:
+            _is_speaking = True
+            tts.play(wav_path)
+        finally:
+            _is_speaking = False
 
     if block:
         _play_worker()
@@ -75,11 +96,3 @@ def request_user_input(prompt: str = "I require your input or authorization, Dev
     print(f"[{config.JARVIS_NAME} (User Input Request)]: {full_speech}")
     speak(full_speech, style="alert", block=True)
     return full_speech
-
-
-if __name__ == "__main__":
-    test_line = "Good evening, sir. All systems are nominal and ready for Phase Two."
-    print("Testing core/voice_output.py...")
-    speak(test_line, style="cinematic")
-    print("Test complete.")
-

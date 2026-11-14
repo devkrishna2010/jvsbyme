@@ -2,168 +2,581 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>J.A.R.V.I.S. — Stark Tactical Holographic HUD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S. V2 — Stark Tactical Holographic HUD</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #00f0ff;
+      --primary-dim: rgba(0, 240, 255, 0.25);
+      --primary-glow: rgba(0, 240, 255, 0.6);
+      --bg-dark: #040910;
+      --panel-bg: rgba(7, 23, 36, 0.65);
+      --panel-border: rgba(0, 240, 255, 0.35);
+      --accent-alert: #ff3366;
+      --accent-gold: #ffaa00;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, monospace; }
     body {
       background: radial-gradient(circle at center, #071724 0%, #02070d 100%);
-      color: #00f0ff;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #e0faff;
       overflow: hidden;
       height: 100vh;
+      width: 100vw;
+      perspective: 1200px;
+      user-select: none;
+    }
+    .hud-container {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 60px 1fr 60px;
+      padding: 16px 24px;
+      transform-style: preserve-3d;
+      transition: transform 0.15s ease-out;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 13px;
+      text-shadow: 0 0 10px var(--primary-glow);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-dim);
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--primary);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr 340px;
+      gap: 20px;
+      padding: 16px 0;
+      height: calc(100vh - 140px);
+      transform-style: preserve-3d;
+    }
+
+    .glass-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 0 15px rgba(0, 240, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: translateZ(20px);
+      transition: box-shadow 0.3s;
+    }
+    .glass-panel:hover {
+      box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.2), inset 0 0 20px rgba(0, 240, 255, 0.15);
+      border-color: var(--primary);
+    }
+    .panel-header {
+      padding: 10px 14px;
+      background: rgba(0, 240, 255, 0.1);
+      border-bottom: 1px solid var(--panel-border);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: bold;
+      color: var(--primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-body {
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--primary-dim); border-radius: 2px; }
+
+    /* Center Liquid Core */
+    .center-stage {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      padding: 24px;
-    }
-    header {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(0, 240, 255, 0.3);
-      padding-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
-    }
-    .hud-center {
+      justify-content: center;
       position: relative;
-      width: 320px;
-      height: 320px;
+      transform: translateZ(40px);
+    }
+    #core-canvas {
+      width: 100%;
+      height: 380px;
+      cursor: crosshair;
+    }
+    .core-caption {
+      margin-top: -30px;
+      font-size: 12px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--primary);
+      text-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    /* Terminal / Chat Area */
+    .chat-container {
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
+      height: 100%;
     }
-    .arc-reactor {
-      position: absolute;
-      width: 260px;
-      height: 260px;
-      border: 2px dashed rgba(0, 240, 255, 0.4);
-      border-radius: 50%;
-      animation: rotateRing 20s linear infinite;
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
-    .arc-inner {
-      position: absolute;
-      width: 180px;
-      height: 180px;
-      border: 2px solid rgba(0, 240, 255, 0.7);
-      border-radius: 50%;
-      box-shadow: 0 0 20px rgba(0, 240, 255, 0.5), inset 0 0 20px rgba(0, 240, 255, 0.5);
-      animation: pulseGlow 2.5s ease-in-out infinite alternate;
+    .message {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 90%;
+      word-break: break-word;
     }
-    .arc-core {
-      position: absolute;
-      width: 80px;
-      height: 80px;
+    .message.user {
+      align-self: flex-end;
+      background: rgba(0, 240, 255, 0.18);
+      border: 1px solid var(--primary);
+      color: #fff;
+    }
+    .message.jarvis {
+      align-self: flex-start;
+      background: rgba(2, 20, 35, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      color: #c4f4ff;
+    }
+    .chat-input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 8px 10px;
+      border-top: 1px solid var(--panel-border);
+      background: rgba(0, 10, 20, 0.6);
+    }
+    .chat-input-bar input {
+      flex: 1;
+      background: rgba(0, 25, 45, 0.7);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+    }
+    .chat-input-bar input:focus { border-color: var(--primary); box-shadow: 0 0 8px var(--primary-dim); }
+    .btn {
       background: rgba(0, 240, 255, 0.2);
-      border: 2px solid #00f0ff;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
       font-weight: bold;
       letter-spacing: 1px;
-      box-shadow: 0 0 30px #00f0ff;
+      text-transform: uppercase;
+      transition: all 0.2s;
     }
-    @keyframes rotateRing {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+    .btn:hover { background: var(--primary); color: #040910; box-shadow: 0 0 12px var(--primary); }
+    .btn.active { background: var(--accent-alert); border-color: #ff6688; color: #fff; box-shadow: 0 0 14px var(--accent-alert); }
+    .btn-small { padding: 3px 8px; font-size: 10px; }
+
+    /* Telemetry grid */
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+      font-size: 12px;
     }
-    @keyframes pulseGlow {
-      from { transform: scale(0.96); box-shadow: 0 0 15px rgba(0, 240, 255, 0.4); }
-      to { transform: scale(1.04); box-shadow: 0 0 35px rgba(0, 240, 255, 0.9); }
-    }
-    canvas {
-      width: 100%;
-      max-width: 650px;
-      height: 90px;
-      border: 1px solid rgba(0, 240, 255, 0.2);
-      background: rgba(0, 20, 35, 0.4);
-      border-radius: 4px;
-      box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.2);
-    }
-    .telemetry-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      width: 100%;
-      max-width: 900px;
-      text-align: center;
-    }
-    .card {
+    .metric-label { opacity: 0.7; letter-spacing: 1px; }
+    .metric-value { font-weight: bold; color: var(--primary); font-family: monospace; }
+
+    /* Memory items */
+    .fact-item {
+      padding: 6px 8px;
       background: rgba(0, 30, 50, 0.4);
-      border: 1px solid rgba(0, 240, 255, 0.3);
-      padding: 12px;
+      border: 1px solid rgba(0, 240, 255, 0.2);
       border-radius: 4px;
-      box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+      margin-bottom: 6px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    .card h3 { font-size: 11px; opacity: 0.7; letter-spacing: 1px; }
-    .card p { font-size: 20px; font-weight: bold; margin-top: 4px; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--panel-border);
+      padding-top: 8px;
+      font-size: 11px;
+      opacity: 0.8;
+      letter-spacing: 1px;
+    }
+    .quick-bar {
+      display: flex;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div>STARK INDUSTRIES // MARK VII HUD</div>
-    <div id="status">STATUS: ONLINE</div>
-    <div id="user">USER: DEV</div>
-  </header>
+  <div class="hud-container" id="hud">
+    <header>
+      <div>STARK INDUSTRIES // MARK VII HUD</div>
+      <div style="display:flex; gap: 15px; align-items:center;">
+        <span class="status-badge"><span class="status-dot"></span><span id="sys-status">SYS: ONLINE</span></span>
+        <span id="sys-clock">--:--:--</span>
+      </div>
+      <div>USER: DEV [AUTHORIZED ARCHITECT]</div>
+    </header>
 
-  <div class="hud-center">
-    <div class="arc-reactor"></div>
-    <div class="arc-inner"></div>
-    <div class="arc-core">JARVIS</div>
-  </div>
+    <div class="main-grid">
+      <!-- LEFT PANEL: Telemetry & Memory -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="glass-panel" style="height: 220px;">
+          <div class="panel-header">System Telemetry</div>
+          <div class="panel-body">
+            <div class="metric-row"><span class="metric-label">CPU LOAD:</span><span class="metric-value" id="val-cpu">0.0%</span></div>
+            <div class="metric-row"><span class="metric-label">MEMORY USAGE:</span><span class="metric-value" id="val-ram">0.0%</span></div>
+            <div class="metric-row"><span class="metric-label">FREE STORAGE:</span><span class="metric-value" id="val-disk">-- GB</span></div>
+            <div class="metric-row"><span class="metric-label">VOICE PROFILE:</span><span class="metric-value" id="val-voice">CINEMATIC</span></div>
+            <div class="metric-row"><span class="metric-label">AFFECTIVE TONE:</span><span class="metric-value" id="val-tone">COMPOSED</span></div>
+          </div>
+        </div>
 
-  <canvas id="waveform"></canvas>
+        <div class="glass-panel" style="flex: 1;">
+          <div class="panel-header">
+            <span>Core Memory Banks</span>
+            <button class="btn btn-small" onclick="promptAddMemory()">+ ADD</button>
+          </div>
+          <div class="panel-body" id="memory-list">
+            <div style="opacity:0.5; text-align:center; padding-top:20px;">Syncing SQLite Records...</div>
+          </div>
+        </div>
+      </div>
 
-  <div class="telemetry-grid">
-    <div class="card"><h3>CPU LOAD</h3><p id="cpu">0.0%</p></div>
-    <div class="card"><h3>MEMORY</h3><p id="ram">0.0%</p></div>
-    <div class="card"><h3>ACOUSTIC MODE</h3><p id="mode">CINEMATIC</p></div>
-    <div class="card"><h3>AFFECTIVE TONE</h3><p id="emotion">COMPOSED</p></div>
+      <!-- CENTER STAGE: Liquid Core & Audio Visualizer -->
+      <div class="center-stage arc-reactor">
+        <canvas id="core-canvas"></canvas>
+        <canvas id="waveform" style="display:none;"></canvas>
+        <div class="core-caption" id="core-state">CORE STATUS: RECEPTIVE</div>
+      </div>
+
+      <!-- RIGHT PANEL: Chat Terminal & Protocols -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="glass-panel" style="flex: 1;">
+          <div class="panel-header">Tactical Terminal</div>
+          <div class="chat-container">
+            <div class="chat-messages" id="chat-box">
+              <div class="message jarvis">Good day, Dev. All foundational systems and SQLite memory banks are online and nominal, sir.</div>
+            </div>
+            <div class="chat-input-bar">
+              <input type="text" id="cmd-input" placeholder="Enter command or question..." onkeydown="if(event.key==='Enter') sendCommand()">
+              <button class="btn" onclick="sendCommand()">SEND</button>
+              <button class="btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()">MIC</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel" style="height: 180px;">
+          <div class="panel-header">Stark Protocols & Controls</div>
+          <div class="panel-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button class="btn btn-small" onclick="quickAction('initiate workshop protocol')">WORKSHOP</button>
+            <button class="btn btn-small" onclick="quickAction('initiate cinema protocol')">CINEMA</button>
+            <button class="btn btn-small" onclick="quickAction('initiate lockdown protocol')">LOCKDOWN</button>
+            <button class="btn btn-small" onclick="quickAction('take a screenshot')">SCREENSHOT</button>
+            <button class="btn btn-small" onclick="quickAction('volume up')">VOL UP</button>
+            <button class="btn btn-small" onclick="quickAction('volume down')">VOL DOWN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>J.A.R.V.I.S. V2 // ZERO LLM ARCHITECTURE // STRICT DETERMINISTIC INTELLIGENCE</div>
+      <div class="quick-bar">
+        <span>SPEECH OUTPUT: <b id="speech-indicator" style="color:var(--primary);">STANDBY</b></span>
+        <span>BARGE-IN: <b style="color:#00ff88;">ACTIVE</b></span>
+      </div>
+    </footer>
   </div>
 
   <script>
-    // Audio waveform simulation
-    const canvas = document.getElementById('waveform');
-    const ctx = canvas.getContext('2d');
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    // -------------------------------------------------------------
+    // 1. 3D Mouse Parallax Depth Tracking
+    // -------------------------------------------------------------
+    const hud = document.getElementById('hud');
+    document.addEventListener('mousemove', (e) => {
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const dx = (e.clientX - cx) / cx;
+      const dy = (e.clientY - cy) / cy;
+      hud.style.transform = `rotateY(${dx * 5}deg) rotateX(${-dy * 5}deg)`;
+    });
 
-    let step = 0;
-    function drawWave() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#00f0ff';
-      ctx.lineWidth = 2;
+    // -------------------------------------------------------------
+    // 2. Liquid Organic Particle Core (Canvas 2D)
+    // -------------------------------------------------------------
+    const canvas = document.getElementById('core-canvas');
+    const ctx = canvas.getContext('2d');
+    let width, height, centerX, centerY;
+
+    function resizeCanvas() {
+      width = canvas.width = canvas.offsetWidth;
+      height = canvas.height = canvas.offsetHeight;
+      centerX = width / 2;
+      centerY = height / 2;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const PARTICLE_COUNT = 320;
+    const particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        baseAngle: (i / PARTICLE_COUNT) * Math.PI * 2,
+        radiusOffset: Math.random() * 20 - 10,
+        speed: 0.01 + Math.random() * 0.02,
+        size: 1.5 + Math.random() * 2.5,
+        orbitDist: 85 + Math.random() * 35,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+
+    let time = 0;
+    let targetAmplitude = 0.2;
+    let currentAmplitude = 0.2;
+
+    function renderCore() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Smooth amplitude transition
+      currentAmplitude += (targetAmplitude - currentAmplitude) * 0.1;
+      time += 0.03 + currentAmplitude * 0.05;
+
+      // Draw subtle orbital rings
+      ctx.save();
+      ctx.translate(centerX, centerY);
+
+      // Outer shimmering ring
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      const mid = canvas.height / 2;
-      for (let x = 0; x < canvas.width; x++) {
-        const y = mid + Math.sin((x * 0.04) + step) * 18 * Math.cos((x * 0.01) + step);
-        if (x === 0) ctx.moveTo(x, y);
+      ctx.arc(0, 0, 140 + currentAmplitude * 15, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Liquid Wobble Core Center
+      ctx.beginPath();
+      const baseR = 75 + currentAmplitude * 45;
+      for (let a = 0; a <= Math.PI * 2; a += 0.05) {
+        const wobble = Math.sin(a * 4 + time * 2) * 8 * currentAmplitude + Math.cos(a * 6 - time) * 6 * currentAmplitude;
+        const r = baseR + wobble;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (a === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
+      ctx.closePath();
+      const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, baseR + 20);
+      grad.addColorStop(0, 'rgba(0, 240, 255, 0.4)');
+      grad.addColorStop(0.7, 'rgba(0, 120, 255, 0.15)');
+      grad.addColorStop(1, 'rgba(0, 240, 255, 0)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.6)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
-      step += 0.08;
-      requestAnimationFrame(drawWave);
-    }
-    drawWave();
 
-    // Telemetry Poller
+      // Swirling Liquid Particles
+      for (let p of particles) {
+        const angle = p.baseAngle + time * p.speed * 20;
+        const dist = p.orbitDist + Math.sin(p.phase + time * 3) * 12 * (1 + currentAmplitude * 2);
+        const px = Math.cos(angle) * dist;
+        const py = Math.sin(angle) * dist;
+
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size * (1 + currentAmplitude * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      requestAnimationFrame(renderCore);
+    }
+    renderCore();
+
+    // -------------------------------------------------------------
+    // 3. Telemetry & Audio State Poller
+    // -------------------------------------------------------------
     setInterval(async () => {
       try {
         const res = await fetch('/api/telemetry');
         if (res.ok) {
           const d = await res.json();
-          document.getElementById('cpu').innerText = d.cpu_percent + '%';
-          document.getElementById('ram').innerText = d.ram_percent + '%';
-          document.getElementById('status').innerText = 'STATUS: ' + d.status.toUpperCase();
-          document.getElementById('mode').innerText = d.mode.toUpperCase();
-          document.getElementById('emotion').innerText = d.emotion.toUpperCase();
+          document.getElementById('val-cpu').innerText = d.cpu_percent + '%';
+          document.getElementById('val-ram').innerText = d.ram_percent + '%';
+          document.getElementById('val-disk').innerText = d.disk_free_gb + ' GB';
+          document.getElementById('val-voice').innerText = d.mode.toUpperCase();
+          document.getElementById('val-tone').innerText = d.emotion.toUpperCase();
+          document.getElementById('sys-status').innerText = 'SYS: ' + d.status.toUpperCase();
+
+          const spk = document.getElementById('speech-indicator');
+          const coreLbl = document.getElementById('core-state');
+          if (d.is_speaking) {
+            targetAmplitude = 0.95;
+            spk.innerText = 'TRANSMITTING VOICE';
+            spk.style.color = '#ffaa00';
+            coreLbl.innerText = 'CORE STATUS: VOCAL TRANSMISSION';
+          } else {
+            targetAmplitude = 0.2;
+            spk.innerText = 'STANDBY';
+            spk.style.color = '#00f0ff';
+            coreLbl.innerText = 'CORE STATUS: RECEPTIVE';
+          }
         }
       } catch (e) {}
-    }, 1500);
+    }, 1200);
+
+    // Clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('sys-clock').innerText = now.toTimeString().split(' ')[0];
+    }, 1000);
+
+    // -------------------------------------------------------------
+    // 4. Memory Manager Interface
+    // -------------------------------------------------------------
+    async function loadMemory() {
+      try {
+        const res = await fetch('/api/memory');
+        if (res.ok) {
+          const data = await res.json();
+          const list = document.getElementById('memory-list');
+          list.innerHTML = '';
+          if (data.facts.length === 0) {
+            list.innerHTML = '<div style="opacity:0.5; padding: 10px;">No custom memories stored yet.</div>';
+            return;
+          }
+          data.facts.forEach(f => {
+            const div = document.createElement('div');
+            div.className = 'fact-item';
+            div.innerHTML = `
+              <div>
+                <b style="color:var(--primary);">${f.key}:</b> ${f.value}
+                <span style="opacity:0.5; font-size:9px;">[${f.category}]</span>
+              </div>
+              <button class="btn btn-small" onclick="deleteFact('${f.key}')" style="color:#ff3366; border-color:#ff3366;">X</button>
+            `;
+            list.appendChild(div);
+          });
+        }
+      } catch (e) {}
+    }
+    loadMemory();
+
+    async function promptAddMemory() {
+      const key = prompt("Enter fact key (e.g. 'favorite programming language'):");
+      if (!key) return;
+      const value = prompt(`Enter value for '${key}':`);
+      if (!value) return;
+      await fetch('/api/memory/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value, category: 'user_defined' })
+      });
+      loadMemory();
+    }
+
+    async function deleteFact(key) {
+      if (!confirm(`Delete memory record for '${key}', Dev?`)) return;
+      await fetch('/api/memory/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      });
+      loadMemory();
+    }
+
+    // -------------------------------------------------------------
+    // 5. Interactive Chat & Command Dispatch
+    // -------------------------------------------------------------
+    function appendMessage(role, text) {
+      const box = document.getElementById('chat-box');
+      const div = document.createElement('div');
+      div.className = 'message ' + role;
+      div.innerText = text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function sendCommand(overrideCmd) {
+      const inp = document.getElementById('cmd-input');
+      const cmd = overrideCmd || inp.value.trim();
+      if (!cmd) return;
+      if (!overrideCmd) inp.value = '';
+
+      appendMessage('user', cmd);
+      try {
+        const res = await fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd, speak: true })
+        });
+        if (res.ok) {
+          const d = await res.json();
+          appendMessage('jarvis', d.reply);
+          loadMemory();
+        } else {
+          appendMessage('jarvis', 'Pardon, sir. The system encountered a communication disruption.');
+        }
+      } catch (e) {
+        appendMessage('jarvis', 'Connection error to local J.A.R.V.I.S. engine: ' + e);
+      }
+    }
+
+    function quickAction(cmd) {
+      sendCommand(cmd);
+    }
+
+    // Push to talk button
+    function startPTT() {
+      const btn = document.getElementById('ptt-btn');
+      btn.classList.add('active');
+      targetAmplitude = 0.7;
+    }
+    function stopPTT() {
+      const btn = document.getElementById('ptt-btn');
+      btn.classList.remove('active');
+      targetAmplitude = 0.2;
+    }
   </script>
 </body>
 </html>
-

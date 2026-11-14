@@ -144,6 +144,14 @@ class JarvisTTS:
 
         return out_path
 
+    def stop_playback(self):
+        """Immediately halts active audio output (Barge-in)."""
+        try:
+            import sounddevice as sd
+            sd.stop()
+        except Exception:
+            pass
+
     def play(self, wav_path: str):
         """
         Play stereo audio at full, uncompromised volume without Windows Media Player ducking.

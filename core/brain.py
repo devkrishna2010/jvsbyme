@@ -83,6 +83,10 @@ class JarvisBrain:
             self.skill_registry["protocol"] = handle_protocol
             from skills.telegram_backup import handle_backup_command
             self.skill_registry["telegram_backup"] = handle_backup_command
+            from skills.project_builder import handle_project_build
+            self.skill_registry["build_project"] = handle_project_build
+            from skills.google_suite import handle_google_suite
+            self.skill_registry["google_suite"] = handle_google_suite
         except ImportError as e:
             pass
 
@@ -190,12 +194,27 @@ class JarvisBrain:
         if any(w in low for w in ["who are you", "what are you", "your name", "what does jarvis stand for"]):
             return IntentResult("identity", 0.95, {}, raw, "witty")
 
+        # Barge-in / Interruption (Section 6)
+        if re.search(r"\b(?:wait|stop|pause|hold on|cancel speech|quiet|shh)\b", low):
+            return IntentResult("barge_in", 0.98, {}, raw, "alert")
+
+        # Autonomous Project Builder (Section 18)
+        build_match = re.search(r"\b(?:build|create|code|develop|generate)\s+(?:me\s+)?(?:a\s+)?(.+?(?:game|app|calculator|project|script|program|dashboard|tool))", raw, re.IGNORECASE)
+        if build_match:
+            return IntentResult("build_project", 0.95, {"prompt": raw}, raw, "cinematic")
+
         # 10. Memory Recall (checked before Memory Store so "what do you remember" routes correctly)
+        if re.search(r"\b(?:what is my name|what's my name|who am i|do you know my name)\b", low):
+            return IntentResult("memory_recall", 0.98, {"query": "user_name"}, raw, "normal")
+
         recall_match = re.search(r"\b(?:what do you remember about|recall|what is my|do you remember|do you know my)\s+(.+)", raw, re.IGNORECASE)
         if recall_match:
             return IntentResult("memory_recall", 0.88, {"query": recall_match.group(1).strip().rstrip("?")}, raw, "normal")
 
         # 11. Memory Store
+        if re.search(r"\b(?:call me|my name is)\s+([a-zA-Z0-9_\-]+)", raw, re.IGNORECASE):
+            return IntentResult("memory_store", 0.95, {"data": raw}, raw, "normal")
+
         rem_match = re.search(r"\b(?:remember|save|note that|record that)\s+(?:that\s+)?(.+)", raw, re.IGNORECASE)
         if rem_match:
             return IntentResult("memory_store", 0.90, {"data": rem_match.group(1).strip()}, raw, "normal")
@@ -208,10 +227,18 @@ class JarvisBrain:
         if any(w in low for w in ["morning brief", "daily brief", "briefing", "give me the brief"]):
             return IntentResult("morning_briefing", 0.95, {}, raw, "cinematic")
 
-        # 14. Web Search
+        # 14. Web Search (Explicit + Natural Factual Questions - Section 3 & 10)
         search_match = re.search(r"\b(?:search(?: the web for| for)?|google|look up|find info on)\s+(.+)", raw, re.IGNORECASE)
         if search_match:
             return IntentResult("web_search", 0.90, {"query": search_match.group(1).strip()}, raw, "normal")
+
+        factual_match = re.search(r"\b(?:tell me about|who is|explain|what(?:'s| is) happening in|how does)\s+(.+)", raw, re.IGNORECASE)
+        if factual_match:
+            return IntentResult("web_search", 0.92, {"query": factual_match.group(1).strip().rstrip("?")}, raw, "cinematic")
+
+        what_is_match = re.search(r"^(?:what is|what's|what are)\s+([a-zA-Z0-9\s]{3,})\??$", raw, re.IGNORECASE)
+        if what_is_match and not any(k in low for k in ["my name", "time", "date", "status", "weather", "today"]):
+            return IntentResult("web_search", 0.90, {"query": what_is_match.group(1).strip()}, raw, "cinematic")
 
         # 10. System Control (Volume, Lock, Apps)
         if "volume up" in low or "louder" in low:
@@ -269,17 +296,34 @@ class JarvisBrain:
         handler = self.skill_registry.get(intent_res.intent)
         exec_error = None
         try:
-            if handler:
+            if intent_res.intent == "barge_in":
+                from core.voice_output import stop_speaking
+                stop_speaking()
+                response_text = "Certainly, Dev. Were you asking something, or shall I continue, sir?"
+            elif handler:
                 response_text = handler(intent_res)
             elif intent_res.intent == "shutdown":
                 response_text = get_response("shutdown")
             elif intent_res.intent == "unknown":
                 response_text = get_response("unknown")
             else:
-                response_text = f"I have recognized the command for {intent_res.intent}, sir, but that skill handler is scheduled for Phase Four."
+                response_text = f"I have recognized the command for {intent_res.intent}, sir."
         except Exception as e:
             exec_error = str(e)
             response_text = f"An internal exception occurred in module {intent_res.intent}, sir: {e}"
+
+        # Context-aware Initiative & Suggestions (Section 4)
+        if intent_res.intent == "build_project" and not exec_error:
+            response_text += " Shall I conduct unit diagnostics on the codebase or schedule a follow-up review for you, Dev?"
+
+        # Log conversation turn in SQLite Relational Memory (Section 2)
+        try:
+            from core.sqlite_memory import get_sqlite_memory
+            mem_db = get_sqlite_memory()
+            mem_db.log_turn("user", query, intent=intent_res.intent, emotion=getattr(self.context, "user_emotion", "neutral"))
+            mem_db.log_turn("assistant", response_text, intent=intent_res.intent, style=suggested_style)
+        except Exception:
+            pass
 
         # Affective Emotion Detection & Tonal Modulation
         suggested_style = intent_res.suggested_style
