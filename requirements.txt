@@ -1,20 +1,24 @@
 # ============================================================
-#  J.A.R.V.I.S  —  Requirements
-#  Install inside venv:  venv\Scripts\python -m pip install -r requirements.txt
+#  J.A.R.V.I.S V2  —  Requirements
+#  Strictly zero LLM / offline local performance
 # ============================================================
 
-# Speech Recognition (offline, lightweight)
+# Core Mathematical & Signal Processing (DSP, Audio Filters)
+numpy>=2.0.0
+scipy>=1.15.0
+
+# Speech Recognition & Voice I/O (Offline Vosk Kaldi)
 vosk==0.3.45
-
-# Microphone / audio I/O
 sounddevice==0.5.6
-
-# Text-to-Speech (Windows SAPI / pyttsx3)
 pyttsx3==2.99
 
-# HTTP requests (web search, APIs)
-requests==2.34.2
+# Native Windows Desktop GUI (PyQt5 Tactical HUD)
+PyQt5>=5.15.11
 
-# HTML parsing (web scraping)
-beautifulsoup4==4.15.0
+# System Telemetry & Automation
+psutil>=7.0.0
+pywin32>=310
 
+# Web Intelligence & Research (Extractive Summaries)
+requests>=2.32.0
+beautifulsoup4>=4.12.0

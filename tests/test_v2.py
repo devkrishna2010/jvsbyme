@@ -126,6 +126,18 @@ class TestJarvisV2Core(unittest.TestCase):
         self.assertIn("mode", data)
         hud.stop()
 
+    def test_08_desktop_gui_components(self):
+        """Validates Section 3: Native PyQt5 Windows Desktop Application components."""
+        from PyQt5.QtWidgets import QApplication
+        from core.desktop_gui import JarvisDesktopWindow, LiquidParticleCoreWidget
+        app = QApplication.instance() or QApplication([])
+        win = JarvisDesktopWindow()
+        self.assertIsNotNone(win)
+        self.assertIsInstance(win.core_widget, LiquidParticleCoreWidget)
+        self.assertTrue(win.table_mem.columnCount() == 4)
+        self.assertTrue(win.table_rem.columnCount() == 3)
+        win.close()
+
 
 if __name__ == "__main__":
     unittest.main()

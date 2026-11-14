@@ -33,10 +33,12 @@ SPEECH_VOLUME = 0.95
 # ------------------------------------------------------------------
 # SPEECH RECOGNITION (VOSK)
 # ------------------------------------------------------------------
-# Download small model from: https://alphacephei.com/vosk/models
-# Recommended for 4 GB RAM: vosk-model-small-en-us-0.15
-VOSK_MODEL_PATH = os.path.join("assets", "voice_model", "vosk-model-small-en-us-0.15")
-VOSK_SAMPLE_RATE = 16000           # Hz — required by vosk small model
+# High accuracy desktop model: vosk-model-en-us-0.22-lgraph (128 MB)
+# Fallback small model: vosk-model-small-en-us-0.15 (40 MB)
+VOSK_MODEL_PATH = os.path.join("assets", "voice_model", "vosk-model-en-us-0.22-lgraph")
+if not os.path.isdir(VOSK_MODEL_PATH):
+    VOSK_MODEL_PATH = os.path.join("assets", "voice_model", "vosk-model-small-en-us-0.15")
+VOSK_SAMPLE_RATE = 16000           # Hz — required by vosk model
 
 # ------------------------------------------------------------------
 # WAKE WORD

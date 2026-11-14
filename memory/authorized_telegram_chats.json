@@ -1,9 +1,10 @@
 {
   "chats": {
     "6626316254": {
-      "name": "Dev",
-      "role": "owner",
-      "enrolled_at": "2026-11-14T11:38:21.024991"
+      "name": "Sree",
+      "username": "sreeroopaa",
+      "role": "authorized_recipient",
+      "enrolled_at": "2026-11-14T15:49:03.854312"
     }
   }
 }
