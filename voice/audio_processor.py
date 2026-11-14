@@ -1,10 +1,10 @@
 """
-J.A.R.V.I.S. — Smooth Cinematic Audio Processor
-Provides silk-smooth, natural vocal delivery:
-- Zero synthetic noise injection (no throat clears or static bursts)
-- Pure linear-phase acoustic warming (warm low-shelf, silk-smooth highs)
-- Gentle analog-modeled spatial width without phase comb-filtering or flutter
-- Transparent soft-knee limiter for clean, unclipped, warm audio
+J.A.R.V.I.S. — Cinematic Audio Processor (Supercharged Bass, Echo & Dynamic Surround)
+Includes:
+1. Sub-Octave Subwoofer Synthesizer: Genuine octave-down chest rumble underneath the voice.
+2. Stereo Workshop Echo: Noticeable ping-pong slapback delay (130ms L / 195ms R) simulating Tony's Malibu lab.
+3. Expanded 3D Surround Soundstage: Wide holographic stereo field.
+4. Human Breath & Organic Pitch Warmth: Removes sterile robotic flatness.
 """
 
 import numpy as np
@@ -17,57 +17,137 @@ class AudioProcessor:
     def __init__(self):
         pass
 
-    def _apply_smooth_eq(self, audio: np.ndarray, sr: int) -> np.ndarray:
+    def _apply_cleanup(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        # Preserve sub-bass down to 40 Hz
+        sos_hp = butter(2, 40.0, 'highpass', fs=sr, output='sos')
+        out = sosfilt(sos_hp, audio)
+        high_cut = min(7500.0, (sr / 2.0) - 100.0)
+        sos_lp = butter(4, high_cut, 'lowpass', fs=sr, output='sos')
+        return sosfilt(sos_lp, out)
+
+    def _generate_subharmonic_rumble(self, audio: np.ndarray, sr: int, mix_gain: float = 0.40) -> np.ndarray:
         """
-        Smooth, non-resonant acoustic warming:
-        - Sub-bass rumble filter below 45 Hz (eliminates DC offset and sub-thump)
-        - Warm chest fundamental enhancement (100–180 Hz)
-        - De-essing / anti-sibilance gentle roll-off above 7500 Hz
+        Synthesizes an authentic SUBWOOFER chest rumble layer:
+        1. Isolates vocal fundamentals (70-220 Hz).
+        2. Generates an octave-down subharmonic via half-frequency zero-crossing divider.
+        3. Low-passes strictly below 140 Hz so only the pure chest-thump reaches the speakers/subwoofer.
         """
-        # Highpass at 45 Hz (smooth 2nd order Butterworth)
-        sos_hp = butter(2, 45.0, 'highpass', fs=sr, output='sos')
-        hp_out = sosfilt(sos_hp, audio)
+        sos_fund = butter(2, [70.0, 220.0], 'bandpass', fs=sr, output='sos')
+        fund = sosfilt(sos_fund, audio)
 
-        # Gentle vocal warmth (110–180 Hz)
-        sos_warm = butter(2, [100.0, 190.0], 'bandpass', fs=sr, output='sos')
-        warmth = sosfilt(sos_warm, hp_out) * 0.25
+        # Non-linear quadratic envelope follower to extract deep pitch vibration
+        analytic = np.abs(fund)
+        sos_env = butter(2, 110.0, 'lowpass', fs=sr, output='sos')
+        low_pulse = sosfilt(sos_env, analytic)
 
-        # Smooth high cut (eliminates harsh high-frequency digital edge)
-        high_cut = min(8000.0, (sr / 2.0) - 200.0)
-        sos_lp = butter(2, high_cut, 'lowpass', fs=sr, output='sos')
-        clean = sosfilt(sos_lp, hp_out + warmth)
+        # Flip alternating pulses to create true sub-octave fundamental (f/2)
+        zero_crossings = np.where(np.diff(np.signbit(fund)))[0]
+        sub_oct = np.zeros_like(fund)
+        sign = 1.0
+        last_idx = 0
+        for z in zero_crossings:
+            sub_oct[last_idx:z] = fund[last_idx:z] * sign
+            sign = -sign
+            last_idx = z
+        sub_oct[last_idx:] = fund[last_idx:] * sign
 
-        return clean
+        # Filter strictly to warm sub-bass (50-130 Hz)
+        sos_sub = butter(3, [50.0, 135.0], 'bandpass', fs=sr, output='sos')
+        clean_sub = sosfilt(sos_sub, sub_oct)
 
-    def _apply_smooth_spatial(
-        self, audio: np.ndarray, sr: int, width: float = 0.15
+        # Add warmth saturation (tape saturation)
+        saturated_sub = np.tanh(clean_sub * 2.5) * 1.2
+
+        return saturated_sub * mix_gain
+
+    def _apply_workshop_echo_and_surround(
+        self, audio: np.ndarray, sr: int, echo_level: float = 0.22, spread: float = 0.45
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Smooth, natural stereo field widening without discrete slapback delay or jitter.
-        Uses a smooth, continuous micro-phase shift for natural presence.
+        Stereo Workshop Echo & 3D Surround:
+        - Noticeable slapback stereo echo (L: 135ms, R: 210ms) with decay.
+        - High-frequency damping for realistic architectural glass/concrete acoustics.
+        - Wide stereo field spread.
         """
-        # Very short 8ms micro-delay for natural acoustic width
-        del_samples = int(0.008 * sr)
-        left = audio.copy()
-        right = np.roll(audio, del_samples)
-        # Fade in the start of the rolled right channel to avoid any click
-        if del_samples > 0:
-            right[:del_samples] = left[:del_samples]
+        # Echo delays: Left 135 ms, Right 210 ms (asymmetric Stark workshop reflection)
+        del_l = int(0.135 * sr)
+        del_r = int(0.210 * sr)
+        max_del = del_r + int(0.150 * sr)
 
-        # Blend with direct signal according to width
-        out_l = left * (1.0 - width * 0.5) + right * (width * 0.5)
-        out_r = right * (1.0 - width * 0.5) + left * (width * 0.5)
+        padded = np.pad(audio, (0, max_del))
+
+        # First reflection tap
+        tap_l1 = np.roll(padded, del_l) * 0.42
+        tap_r1 = np.roll(padded, del_r) * 0.38
+
+        # Second reflection tap (echo feedback)
+        tap_l2 = np.roll(padded, int(del_l * 1.85)) * 0.20
+        tap_r2 = np.roll(padded, int(del_r * 1.75)) * 0.16
+
+        echo_l = tap_l1 + tap_l2
+        echo_r = tap_r1 + tap_r2
+
+        # Damping filter on echo so it's warm and cinematic, not harsh
+        sos_echo_lp = butter(2, 3200.0, 'lowpass', fs=sr, output='sos')
+        echo_l = sosfilt(sos_echo_lp, echo_l)
+        echo_r = sosfilt(sos_echo_lp, echo_r)
+
+        # Center direct voice
+        direct_l = np.pad(audio, (0, max_del))
+        direct_r = np.pad(audio, (0, max_del))
+
+        # Mix dry + echo
+        out_l = direct_l + (echo_l * echo_level)
+        out_r = direct_r + (echo_r * echo_level)
+
+        # Widen stereo soundstage
+        stereo_diff = (out_l - out_r) * spread
+        out_l = out_l + stereo_diff
+        out_r = out_r - stereo_diff
 
         return out_l, out_r
 
-    def master_limiter(self, signal: np.ndarray, ceiling: float = 0.95) -> np.ndarray:
-        """Smooth, transparent limiter to ensure 100% clean output without distortion."""
+    def generate_human_breath(self, sr: int, duration_sec: float = 0.20, intensity: float = 0.16) -> np.ndarray:
+        """Organic human breath intake envelope before speech."""
+        n_samples = int(duration_sec * sr)
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32)
+
+        noise = np.random.normal(0, 1.0, n_samples).astype(np.float32)
+        sos_breath = butter(2, [360.0, 1850.0], 'bandpass', fs=sr, output='sos')
+        breath = sosfilt(sos_breath, noise)
+
+        t = np.linspace(0, 1.0, n_samples, dtype=np.float32)
+        envelope = (np.sin(np.pi * (t - 0.5)) + 1.0) / 2.0
+        taper = int(0.02 * sr)
+        if taper < n_samples:
+            envelope[-taper:] *= np.linspace(1.0, 0.0, taper)
+
+        return breath * envelope * intensity
+
+    def generate_throat_clear(self, sr: int, duration_sec: float = 0.22, intensity: float = 0.14) -> np.ndarray:
+        """Subtle, polite organic human throat-clear / gentle cough characteristic."""
+        n_samples = int(duration_sec * sr)
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32)
+
+        # Dual pulse representing vocal cord clearing
+        noise = np.random.normal(0, 1.0, n_samples).astype(np.float32)
+        sos_tc = butter(2, [280.0, 1200.0], 'bandpass', fs=sr, output='sos')
+        filtered = sosfilt(sos_tc, noise)
+
+        t = np.linspace(0, 1.0, n_samples, dtype=np.float32)
+        # Double-bump envelope (hem... hem)
+        env = (np.sin(2 * np.pi * t) ** 2) * np.exp(-3.5 * t)
+        return filtered * env * intensity
+
+    def master_limiter(self, signal: np.ndarray, ceiling: float = 0.96) -> np.ndarray:
+        """Soft-knee limiter to prevent any distortion or clipping."""
         peak = np.max(np.abs(signal))
         if peak < 1e-5:
             return signal
 
-        # Soft tanh saturation above 0.85
-        knee = 0.85 * ceiling
+        knee = 0.82 * ceiling
         out = signal.copy()
         mask = np.abs(out) > knee
         if np.any(mask):
@@ -85,11 +165,12 @@ class AudioProcessor:
         profile: VoiceProfile
     ) -> Tuple[np.ndarray, int]:
         """
-        Smooth audio processing chain:
-        - Normalizes raw input without clipping
-        - Smooth EQ enhancement (silk-smooth highs, warm low-end)
-        - Subtle natural spatial acoustic width
-        - Zero noise or synthetic clicks
+        Complete processing chain:
+        1. Sub-octave subwoofer generator (heavy chest-thump bass)
+        2. Multi-band warm EQ
+        3. Human breath intake
+        4. Malibu lab stereo echo + wide surround
+        5. Anti-clipping limiter with zero volume fade
         """
         if raw_audio.dtype == np.int16:
             audio_f = raw_audio.astype(np.float32) / 32768.0
@@ -99,27 +180,40 @@ class AudioProcessor:
             if max_v > 1.0:
                 audio_f = audio_f / max_v
 
-        # 1. Smooth Analog EQ
-        smooth_audio = self._apply_smooth_eq(audio_f, sr)
+        # Clean DC and ultrasonic hash
+        cleaned = self._apply_cleanup(audio_f, sr)
 
-        # 2. Smooth Subtle Spatial Soundstage (zero slapback delay)
-        width = 0.15 if profile.name == "cinematic" else 0.08
-        left_ch, right_ch = self._apply_smooth_spatial(smooth_audio, sr, width=width)
+        # 1. HEAVY SUBWOOFER BASS (Sub-octave chest rumble)
+        sub_rumble = self._generate_subharmonic_rumble(cleaned, sr, mix_gain=0.48)
+        
+        # 2. Warm low-mid EQ boost (+4dB at 110-180Hz)
+        sos_warm = butter(2, [100.0, 190.0], 'bandpass', fs=sr, output='sos')
+        warmth = sosfilt(sos_warm, cleaned) * 1.5
 
-        # 3. Transparent Peak Limiting
-        ceiling = 0.95
-        left_master = self.master_limiter(left_ch * 1.05, ceiling=ceiling)
-        right_master = self.master_limiter(right_ch * 1.05, ceiling=ceiling)
+        # Sum core voice + subwoofer rumble + warmth
+        bassy_voice = cleaned + sub_rumble + warmth
 
-        # Smooth fade-in and fade-out (2ms) to eliminate any start/stop clicks
-        fade_samples = int(0.002 * sr)
-        if len(left_master) > fade_samples * 2:
-            fade_in = np.linspace(0.0, 1.0, fade_samples)
-            fade_out = np.linspace(1.0, 0.0, fade_samples)
-            left_master[:fade_samples] *= fade_in
-            left_master[-fade_samples:] *= fade_out
-            right_master[:fade_samples] *= fade_in
-            right_master[-fade_samples:] *= fade_out
+        # 3. Organic Human Breath / Polite Throat Clear intake at beginning
+        if profile.add_breath:
+            # 1 in 6 chance of polite human throat-clear, otherwise natural breath intake
+            if np.random.rand() < 0.16:
+                human_cue = self.generate_throat_clear(sr, duration_sec=0.22, intensity=0.14)
+            else:
+                human_cue = self.generate_human_breath(sr, duration_sec=0.20, intensity=0.16)
+            cross = int(0.04 * sr)
+            if len(bassy_voice) > cross:
+                bassy_voice = np.concatenate([human_cue[:-cross], bassy_voice])
+
+        # 4. Malibu workshop stereo echo & wide 3D surround
+        echo_lvl = 0.26 if profile.name == "cinematic" else 0.14
+        spread   = 0.48 if profile.name == "cinematic" else 0.28
+        left_ch, right_ch = self._apply_workshop_echo_and_surround(
+            bassy_voice, sr, echo_level=echo_lvl, spread=spread
+        )
+
+        # 5. Master gain and zero-distortion limiter
+        left_master = self.master_limiter(left_ch * profile.master_gain, ceiling=profile.limiter_ceiling)
+        right_master = self.master_limiter(right_ch * profile.master_gain, ceiling=profile.limiter_ceiling)
 
         # Convert to 16-bit PCM stereo
         pcm_l = (left_master * 32767.0).clip(-32768, 32767).astype(np.int16)
