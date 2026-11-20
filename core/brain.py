@@ -8,6 +8,12 @@ Guiding Principles:
 1. Absolute Integrity: Never pretends a task is complete when it hasn't succeeded.
 2. Character Fidelity: Formal British cadence, confident wit, composed elegance.
 3. Lightweight & Fast: Sub-millisecond rule & pattern routing, zero local LLM overhead.
+
+V2 Repairs (Phase 2):
+- ISSUE-001: suggested_style moved before SQLite log — no more UnboundLocalError.
+- ISSUE-002: Greeting regex expanded — heyy, hi there, yo, howdy all recognized.
+- ISSUE-003: Volume patterns broadened — increase/raise/lower/decrease volume work.
+- ISSUE-005: Added capabilities intent, how_are_you intent, broader compliment patterns.
 """
 
 import re
@@ -51,6 +57,8 @@ class JarvisBrain:
         self.skill_registry["time"] = self._handle_time
         self.skill_registry["date"] = self._handle_date
         self.skill_registry["greeting"] = self._handle_greeting
+        self.skill_registry["how_are_you"] = self._handle_how_are_you
+        self.skill_registry["capabilities"] = self._handle_capabilities
         self.skill_registry["status"] = self._handle_status
         self.skill_registry["identity"] = self._handle_identity
         self.skill_registry["mode_switch"] = self._handle_mode_switch
@@ -87,7 +95,7 @@ class JarvisBrain:
             self.skill_registry["build_project"] = handle_project_build
             from skills.google_suite import handle_google_suite
             self.skill_registry["google_suite"] = handle_google_suite
-        except ImportError as e:
+        except ImportError:
             pass
 
     def register_skill(self, intent_name: str, handler: Callable):
@@ -103,7 +111,10 @@ class JarvisBrain:
         Zero memory overhead; deterministic and accurate.
         """
         raw = text.strip()
-        low = raw.lower()
+        low = raw.lower().strip()
+
+        # Normalize common whitespace / punctuation noise
+        low = re.sub(r"[!?.]+$", "", low).strip()
 
         # 1. Mode Switching
         if any(w in low for w in ["cinematic mode", "cinema mode"]):
@@ -113,8 +124,8 @@ class JarvisBrain:
         if any(w in low for w in ["night mode", "quiet mode", "sleep mode"]):
             return IntentResult("mode_switch", 0.98, {"mode": "night"}, raw, "night")
 
-        # Protocols (Stark Automated Routines)
-        if "protocol" in low or any(w in low for w in ["coding mode", "focus mode", "movie mode", "lockdown"]):
+        # Protocols (Stark Automated Routines) — before generic "focus mode" to avoid eating it
+        if "protocol" in low or any(w in low for w in ["coding mode", "movie mode", "lockdown"]):
             proto_match = re.search(r"\b(?:initiate|engage|run|execute|activate|start)?\s*([a-zA-Z\s_]+)\s+protocol\b", low)
             target = "workshop"
             if proto_match:
@@ -135,12 +146,18 @@ class JarvisBrain:
                 target = "lockdown"
             elif "night" in low or "bedtime" in low:
                 target = "night_owl"
-            elif "coding" in low or "focus" in low:
+            elif "coding" in low:
                 target = "workshop"
             return IntentResult("protocol", 0.95, {"protocol": target}, raw, "cinematic")
 
+        # Focus mode on/off — explicit, before generic protocol sweep
+        if re.search(r"\bfocus\s+mode\s+off\b|\bdisable\s+focus\b|\bfocus\s+off\b", low):
+            return IntentResult("mode_switch", 0.96, {"mode": "normal"}, raw, "normal")
+        if re.search(r"\bfocus\s+mode\b|\bfocus\s+on\b|\benable\s+focus\b", low):
+            return IntentResult("protocol", 0.95, {"protocol": "workshop"}, raw, "cinematic")
+
         # 2. Shutdown / Standby
-        if any(w in low for w in ["shutdown", "shut down", "power down", "good night", "exit", "quit", "go to sleep"]):
+        if any(w in low for w in ["shutdown", "shut down", "power down", "good night jarvis", "exit jarvis", "quit jarvis", "go to sleep jarvis"]):
             return IntentResult("shutdown", 0.95, {}, raw, "cinematic")
 
         # 3. Time & Date
@@ -155,9 +172,23 @@ class JarvisBrain:
             expr = calc_match.group(1).replace("^", "**").strip()
             return IntentResult("calculation", 0.90, {"expression": expr}, raw, "normal")
 
-        # 7. Greetings (check before general how are you status)
-        if re.search(r"^(hey|hello|hi|good morning|good afternoon|good evening)\b", low):
+        # 5. Greetings — broad, handles typos (heyy, heyyy), variants (hi there, yo, howdy)
+        if re.search(r"^(hey+|hello+|hi+|hiya|howdy|yo|sup|greetings|wassup|what('?s)?\s+up)\b", low):
             return IntentResult("greeting", 0.90, {}, raw, "cinematic")
+        if re.search(r"^(good\s+(morning|afternoon|evening|day))\b", low):
+            return IntentResult("greeting", 0.92, {}, raw, "cinematic")
+        if re.search(r"^(hey|hi|hello|howdy)\s+(jarvis|there|man|bro|buddy)\b", low):
+            return IntentResult("greeting", 0.92, {}, raw, "cinematic")
+
+        # 6. How are you — separate from system status
+        if re.search(r"\b(how are you|how('?s| is) it going|how are you doing|are you (okay|ok|fine|good)|you (good|okay|ok|doing well))\b", low):
+            return IntentResult("how_are_you", 0.92, {}, raw, "witty")
+
+        # 7. Capabilities / Help
+        if re.search(r"\b(what can you do|what are your (capabilities|skills|features|commands)|help me|show me (what you can|your commands)|what (commands|functions) do you (have|know)|what do you (do|know))\b", low):
+            return IntentResult("capabilities", 0.95, {}, raw, "cinematic")
+        if low.strip() in ["help", "commands", "features", "capabilities"]:
+            return IntentResult("capabilities", 0.95, {}, raw, "cinematic")
 
         # 8. Weather & Environmental Sensors
         if re.search(r"\b(weather|temperature|forecast|climate|how('s| is) it outside|outside temp)\b", low):
@@ -169,7 +200,7 @@ class JarvisBrain:
         if any(w in low for w in ["detect flaw", "flaw", "flaws", "what should we improve", "what to improve", "self reflection", "self diagnostic audit", "system improvements"]):
             return IntentResult("flaws_audit", 0.95, {}, raw, "cinematic")
 
-        if any(w in low for w in ["check status", "how are you", "all green", "systems check"]) or low.strip() == "status":
+        if any(w in low for w in ["check status", "all green", "systems check"]) or low.strip() == "status":
             return IntentResult("status", 0.92, {}, raw, "cinematic")
 
         if any(w in low for w in ["telemetry", "hardware", "cpu", "ram", "battery", "diagnostic"]):
@@ -178,19 +209,19 @@ class JarvisBrain:
         if "status" in low:
             return IntentResult("status", 0.92, {}, raw, "cinematic")
 
-        # 9. Emotion & Mood Inquiries
+        # 10. Emotion & Mood Inquiries
         if re.search(r"\b(how do i sound|what is my mood|detect my emotion|check my tone|what tone do you detect|am i happy|am i angry|am i sad)\b", low):
             return IntentResult("emotion_check", 0.95, {}, raw, "witty")
 
-        # 10. Milestone Congratulation & Achievements
+        # 11. Milestone Congratulation & Achievements
         if any(w in low for w in ["congratulate me", "what did i achieve", "celebrate milestone", "what did we accomplish", "last event", "congratulate"]):
             return IntentResult("congratulate", 0.95, {}, raw, "witty")
 
-        # 11. Telegram Project Backup
+        # 12. Telegram Project Backup
         if any(w in low for w in ["backup to telegram", "telegram backup", "backup now", "send backup"]):
             return IntentResult("telegram_backup", 0.95, {}, raw, "cinematic")
 
-        # 12. Identity
+        # 13. Identity
         if any(w in low for w in ["who are you", "what are you", "your name", "what does jarvis stand for"]):
             return IntentResult("identity", 0.95, {}, raw, "witty")
 
@@ -203,7 +234,7 @@ class JarvisBrain:
         if build_match:
             return IntentResult("build_project", 0.95, {"prompt": raw}, raw, "cinematic")
 
-        # 10. Memory Recall (checked before Memory Store so "what do you remember" routes correctly)
+        # 14. Memory Recall
         if re.search(r"\b(?:what is my name|what's my name|who am i|do you know my name)\b", low):
             return IntentResult("memory_recall", 0.98, {"query": "user_name"}, raw, "normal")
 
@@ -211,7 +242,7 @@ class JarvisBrain:
         if recall_match:
             return IntentResult("memory_recall", 0.88, {"query": recall_match.group(1).strip().rstrip("?")}, raw, "normal")
 
-        # 11. Memory Store
+        # 15. Memory Store
         if re.search(r"\b(?:call me|my name is)\s+([a-zA-Z0-9_\-]+)", raw, re.IGNORECASE):
             return IntentResult("memory_store", 0.95, {"data": raw}, raw, "normal")
 
@@ -219,15 +250,15 @@ class JarvisBrain:
         if rem_match:
             return IntentResult("memory_store", 0.90, {"data": rem_match.group(1).strip()}, raw, "normal")
 
-        # 12. Reminders & Scheduler
+        # 16. Reminders & Scheduler
         if re.search(r"\b(?:remind me to|set a reminder|create reminder)\b", low):
             return IntentResult("reminder", 0.95, {}, raw, "normal")
 
-        # 13. Morning / Daily Briefing
+        # 17. Morning / Daily Briefing
         if any(w in low for w in ["morning brief", "daily brief", "briefing", "give me the brief"]):
             return IntentResult("morning_briefing", 0.95, {}, raw, "cinematic")
 
-        # 14. Web Search (Explicit + Natural Factual Questions - Section 3 & 10)
+        # 18. Web Search (Explicit + Natural Factual Questions)
         search_match = re.search(r"\b(?:search(?: the web for| for)?|google|look up|find info on)\s+(.+)", raw, re.IGNORECASE)
         if search_match:
             return IntentResult("web_search", 0.90, {"query": search_match.group(1).strip()}, raw, "normal")
@@ -240,33 +271,39 @@ class JarvisBrain:
         if what_is_match and not any(k in low for k in ["my name", "time", "date", "status", "weather", "today"]):
             return IntentResult("web_search", 0.90, {"query": what_is_match.group(1).strip()}, raw, "cinematic")
 
-        # 10. System Control (Volume, Lock, Apps)
-        if "volume up" in low or "louder" in low:
+        # 19. System Control — Volume (broadened patterns)
+        if re.search(r"\b(increase|raise|turn up|boost|crank up)\b.*\bvolume\b|\bvolume\s+up\b|\blouder\b|\bturn it up\b", low):
             return IntentResult("system_control", 0.92, {"action": "volume_up"}, raw, "normal")
-        if "volume down" in low or "quieter" in low:
+        if re.search(r"\b(decrease|lower|reduce|turn down|drop)\b.*\bvolume\b|\bvolume\s+down\b|\bquieter\b|\bturn it down\b", low):
             return IntentResult("system_control", 0.92, {"action": "volume_down"}, raw, "normal")
-        if "mute" in low:
+        if re.search(r"\b(mute|silence|shut up|no sound)\b", low):
             return IntentResult("system_control", 0.92, {"action": "mute"}, raw, "normal")
-        if "lock" in low and ("pc" in low or "computer" in low or "system" in low or "screen" in low):
+        if re.search(r"\b(unmute|restore sound|sound on|audio on)\b", low):
+            return IntentResult("system_control", 0.92, {"action": "mute"}, raw, "normal")  # toggle
+        if "lock" in low and re.search(r"\b(pc|computer|system|screen|workstation|machine)\b", low):
             return IntentResult("system_control", 0.95, {"action": "lock"}, raw, "alert")
-        if "screenshot" in low or "capture screen" in low:
+        if "screenshot" in low or "capture screen" in low or "take a screenshot" in low or "grab screen" in low:
             return IntentResult("system_control", 0.92, {"action": "screenshot"}, raw, "normal")
 
-        app_match = re.search(r"\b(?:open|launch|start)\s+([a-zA-Z0-9\s]+)", raw, re.IGNORECASE)
-        if app_match and not any(k in low for k in ["file", "tab", "window"]):
-            app_name = app_match.group(1).strip()
-            return IntentResult("app_launch", 0.88, {"app": app_name}, raw, "cinematic")
+        # 20. Application Launch — after volume/lock to avoid conflicts
+        app_match = re.search(r"\b(?:open|launch|start|run|load)\s+([a-zA-Z0-9][a-zA-Z0-9\s]{1,30})", raw, re.IGNORECASE)
+        if app_match:
+            app_candidate = app_match.group(1).strip()
+            # Exclude vague words that shouldn't map to apps
+            if not re.match(r"^(a |an |the |my |this |that |up|down|more|less)$", app_candidate, re.I):
+                return IntentResult("app_launch", 0.88, {"app": app_candidate}, raw, "cinematic")
 
-        # 11. Repeat Last
-        if any(w in low for w in ["repeat", "what did you say", "pardon", "say that again"]):
+        # 21. Repeat Last
+        if any(w in low for w in ["repeat", "what did you say", "pardon", "say that again", "say it again"]):
             return IntentResult("repeat", 0.95, {}, raw, "normal")
 
-        # 12. Jokes / Banter / Wit
-        if any(w in low for w in ["tell me a joke", "be funny", "make me laugh"]):
+        # 22. Jokes / Banter / Wit
+        if any(w in low for w in ["tell me a joke", "be funny", "make me laugh", "say something funny", "joke"]):
             return IntentResult("banter", 0.92, {"type": "joke"}, raw, "witty")
         if any(w in low for w in ["tea", "ambulance"]):
             return IntentResult("banter", 0.98, {"type": "tea_ambulance"}, raw, "witty")
-        if any(w in low for w in ["thank you", "thanks", "good job", "well done"]):
+        # Compliments / gratitude — broadened
+        if re.search(r"\b(thank you|thanks|good (job|work|one)|well done|great (job|work)|nice (work|job|one)|brilliant|amazing|awesome|perfect|excellent)\b", low):
             return IntentResult("banter", 0.92, {"type": "compliment"}, raw, "witty")
 
         # Fallback Unknown
@@ -291,6 +328,9 @@ class JarvisBrain:
         self.context.last_intent = intent_res.intent
         self.context.last_parameters = intent_res.parameters
         self.context.turn_count += 1
+
+        # FIX ISSUE-001: suggested_style must be assigned BEFORE the SQLite log that uses it
+        suggested_style = intent_res.suggested_style
 
         # Check registered skill handlers
         handler = self.skill_registry.get(intent_res.intent)
@@ -326,7 +366,6 @@ class JarvisBrain:
             pass
 
         # Affective Emotion Detection & Tonal Modulation
-        suggested_style = intent_res.suggested_style
         try:
             from core.emotion_detector import get_emotion_detector
             emo = get_emotion_detector().detect_emotion(query, audio_data=audio_data)
@@ -375,6 +414,7 @@ class JarvisBrain:
         mem = get_memory()
         msg = mem.get_last_event_and_congratulate()
         return msg or "Allow me to congratulate you, Dev. As always, a great pleasure watching you work, sir."
+
     def _handle_time(self, res: IntentResult) -> str:
         current_time = datetime.datetime.now().strftime("%I:%M %p")
         return get_response("time", time=current_time)
@@ -390,7 +430,20 @@ class JarvisBrain:
         elif 12 <= hour < 17:
             return get_response("greeting_afternoon")
         else:
-            return get_response("startup")
+            return get_response("greeting_evening")
+
+    def _handle_how_are_you(self, res: IntentResult) -> str:
+        return get_response("how_are_you")
+
+    def _handle_capabilities(self, res: IntentResult) -> str:
+        return (
+            "I am capable of quite a broad range of tasks, sir. Here is a summary: "
+            "Voice and text commands; opening any application or website; web research on any topic; "
+            "setting reminders and delivering briefings; system controls including volume, screenshots, and PC lock; "
+            "persistent memory for facts and preferences; weather reports; autonomous project building; "
+            "self-diagnostic audits; and automated backups to Telegram. "
+            "Simply ask, and I shall do my best, sir."
+        )
 
     def _handle_status(self, res: IntentResult) -> str:
         return get_response("system_status")
@@ -437,4 +490,3 @@ class JarvisBrain:
         if self.context.last_response:
             return f"{get_response('repeat')} {self.context.last_response}"
         return "I have not spoken recently, sir."
-

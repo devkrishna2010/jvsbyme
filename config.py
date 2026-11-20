@@ -12,7 +12,7 @@ import os
 JARVIS_NAME        = "JARVIS"
 USER_NAME          = "Dev"
 USER_TITLE         = "sir"          # Default address ("sir", with "Dev" used in personal/milestone context)
-ASSISTANT_VERSION  = "1.0.0"
+ASSISTANT_VERSION  = "2.0.0"
 
 # ------------------------------------------------------------------
 # VOICE / TTS SETTINGS (J.A.R.V.I.S. Cinematic Engine)

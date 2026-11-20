@@ -53,13 +53,15 @@ class JarvisTTS:
             "--sentence_silence", str(profile.sentence_silence)
         ]
 
-        # Start process with text on stdin
+        # Start process with text on stdin — CREATE_NO_WINDOW prevents CMD flash on Windows
+        _flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
         psi = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=PIPER_DIR
+            cwd=PIPER_DIR,
+            creationflags=_flags,
         )
         _, stderr_data = psi.communicate(input=text.encode("utf-8"))
 
