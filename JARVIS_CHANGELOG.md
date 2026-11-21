@@ -1,6 +1,30 @@
-# J.A.R.V.I.S. V2 — Master Changelog & Evolution Ledger
+# J.A.R.V.I.S. V2 & Mark VII — Master Changelog & Evolution Ledger
 
-## Version 2.0.0 (Current Release) — Complete Rebuild & Master Directive Execution
+## Mark VII Release (Current) — Complete Voice Pipeline & Holographic Iron Man HUD
+
+### 1. Centralized Audio Input Architecture (`core/audio_manager.py`)
+- **Single Continuous Microphone Stream:** Eliminated repeated audio stream destruction and recreation. A single background worker manages `sounddevice.RawInputStream` (16000 Hz, 16-bit PCM mono).
+- **Acoustic State Machine:** Implemented robust state transitions (`STANDBY`, `WAKE_DETECTED`, `LISTENING`, `PROCESSING`, `SPEAKING`, `ERROR`).
+- **Hands-Free Wake-Word Detection:** Continuous low-power listener recognizing "Jarvis" and "Hey Jarvis" with Vosk grammar constraints.
+- **Voice Activity Detection (VAD):** Intelligent silence timeout (1.6s) and maximum recording ceiling (12s) protecting natural pauses from premature truncation.
+- **Live RMS Level Broadcasting:** Computes audio amplitude at 60 FPS and broadcasts normalized volume to the HUD for real-time waveform visualization.
+- **Barge-In Speech Interruption:** Active listening for "Stop", "Wait", and "Cancel" during speech output to halt TTS immediately.
+- **Echo Suppression:** Prevents J.A.R.V.I.S. from transcribing his own TTS voice.
+- **Hardware Disconnect Recovery:** Graceful reconnection and re-discovery if microphone drops or default device changes.
+
+### 2. Transparent Iron Man Holographic HUD (`core/holographic_hud.py`)
+- **Genuine Desktop Transparency:** Built with `Qt.WA_TranslucentBackground`, `Qt.FramelessWindowHint`, and `Qt.WindowStaysOnTopHint` — no rectangular black or white application window.
+- **Compact Stark Arc Reactor (Default):** Floats at 220x220 px in the lower-right corner with 60 FPS concentric rotating graduation rings, 10 palladium coils, fine radial ticks, and pulsating palladium core.
+- **Audio-Reactive Particle Dynamics:** Reactor energy ring and breathing core pulse dynamically in real-time response to microphone sound levels.
+- **Expandable Holographic Tactical Panels:** Automatically unfolds during speech recognition and query execution, rendering translucent cyan glass telemetry cards, live speech transcription, and assistant replies.
+- **Dynamic Cursor Avoidance:** Automatically deflects when mouse cursor approaches within 110 pixels in compact mode.
+
+### 3. Security Remediation
+- **Telegram Bot Token Redacted:** Erased hardcoded bot token from `README.md` and `skills/telegram_backup.py`. Isolated credentials to environment variables and `config_private.py`.
+
+---
+
+## Version 2.0.0 — Rebuild & Master Directive Execution
 
 ### Architectural Improvements & Core Additions
 1. **Floating Desktop Companion (`core/floating_companion.py`):**

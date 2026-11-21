@@ -119,7 +119,7 @@ Jarvis/
 
 ## Phase 12 — Telegram Cloud Backup, Saturday Automation & Windows Startup ✅
 - [x] Project zip compilation and automatic chunking (`skills/telegram_backup.py`) under Telegram's 50 MB threshold
-- [x] Direct dispatch to Telegram bot (`9231193145:AAFngE2hI2GweaelqcjD9DbkoUKVXPeO0cU`) to chat `6626316254`
+- [x] Direct dispatch to Telegram bot (`<CONFIGURED_IN_PRIVATE_CONFIG>`) to chat `6626316254`
 - [x] Automatic Saturday scheduled backup engine (`check_and_run_saturday_backup`)
 - [x] Daily startup check: if the prior Saturday backup was missed, runs immediately
 - [x] Native Windows User Startup launcher installed (`LaunchJarvis.vbs`) for auto-boot with PC

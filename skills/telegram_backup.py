@@ -30,7 +30,7 @@ BACKUP_TEMP_DIR = os.path.join(ROOT, "memory", "backups")
 AUTHORIZED_CHATS_FILE = os.path.join(ROOT, "memory", "authorized_telegram_chats.json")
 
 # Default Telegram Credentials provided by Dev
-TELEGRAM_BOT_TOKEN = getattr(config, "TELEGRAM_BOT_TOKEN", "9231193145:AAFngE2hI2GweaelqcjD9DbkoUKVXPeO0cU")
+TELEGRAM_BOT_TOKEN = getattr(config, "TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = getattr(config, "TELEGRAM_CHAT_ID", "6626316254")
 
 PASSCODE = "2681"

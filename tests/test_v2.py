@@ -170,6 +170,45 @@ class TestJarvisV2Core(unittest.TestCase):
             intent_res = self.brain.parse_intent(q)
             self.assertEqual(intent_res.intent, expected_intent, f"Query '{q}' failed to parse as '{expected_intent}' (got '{intent_res.intent}')")
 
+    def test_11_audio_manager_state_machine(self):
+        """Validates Mark VII: Centralized AudioManager state machine & recognizer lifecycle."""
+        from core.audio_manager import get_audio_manager, AudioState
+        mgr = get_audio_manager()
+        self.assertIsNotNone(mgr)
+        self.assertIsNotNone(mgr.wake_recognizer)
+        self.assertIsNotNone(mgr.command_recognizer)
+        self.assertIsNotNone(mgr.barge_in_recognizer)
+
+        # Test state transition
+        mgr.set_state(AudioState.WAKE_DETECTED)
+        self.assertEqual(mgr.state, AudioState.WAKE_DETECTED)
+        mgr.set_state(AudioState.STANDBY)
+        self.assertEqual(mgr.state, AudioState.STANDBY)
+
+    def test_12_transparent_holographic_hud(self):
+        """Validates Mark VII: Iron Man Transparent Holographic HUD geometry & expansion."""
+        from PyQt5.QtWidgets import QApplication
+        from core.holographic_hud import JarvisHolographicHUD
+        app = QApplication.instance() or QApplication([])
+        hud = JarvisHolographicHUD()
+        self.assertIsNotNone(hud)
+        self.assertEqual(hud.width(), 220)
+        self.assertEqual(hud.height(), 220)
+
+        # Test expansion to tactical panel
+        hud.expand_hud()
+        self.assertTrue(hud.is_expanded)
+        self.assertEqual(hud.width(), 520)
+        self.assertEqual(hud.height(), 360)
+
+        # Test collapse to compact reactor
+        hud.collapse_hud()
+        self.assertFalse(hud.is_expanded)
+        self.assertEqual(hud.width(), 220)
+        self.assertEqual(hud.height(), 220)
+        hud.audio_mgr.stop()
+        hud.close()
+
 
 if __name__ == "__main__":
     unittest.main()

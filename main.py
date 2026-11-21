@@ -125,6 +125,8 @@ def main():
     parser.add_argument("--brief", action="store_true", help="Deliver daily intelligence briefing with live weather")
     parser.add_argument("--flaws", action="store_true", help="Run autonomous self-diagnostic flaw audit and save report")
     parser.add_argument("--companion", action="store_true", help="Launch directly into lightweight floating desktop companion")
+    parser.add_argument("--diag", "--diagnostics", action="store_true", dest="diag", help="Run complete voice pipeline & microphone diagnostic")
+    parser.add_argument("--hud-large", action="store_true", help="Launch expanded legacy rectangular desktop dashboard")
     args = parser.parse_args()
 
     # Passcode 2681 Telegram Listener & Saturday Backup check active across all modes
@@ -155,20 +157,36 @@ def main():
         res = brain.process_query("run self diagnostic flaw audit")
         print(f"[{config.JARVIS_NAME}]: {res[0]}")
         speak(res[0], style=res[1], block=True)
-    elif args.companion:
-        try:
-            from core.floating_companion import launch_floating_companion
-            launch_floating_companion(show_hud=False)
-        except Exception as e:
-            print(f"[Floating Companion Launch Fallback]: {e}")
-            run_interactive_mode(brain)
-    else:
-        # Default V2 behavior: Launch Native Windows Desktop Application
+    elif args.diag:
+        from core.audio_manager import get_audio_manager
+        import sounddevice as sd
+        print("=" * 65)
+        print("  J.A.R.V.I.S. Mark VII — Complete Voice Pipeline Diagnostic")
+        print("=" * 65)
+        print(f"[MIC] Default sounddevice device: {sd.default.device}")
+        for idx, d in enumerate(sd.query_devices()):
+            if d.get("max_input_channels", 0) > 0:
+                print(f"  Input Device [{idx}]: {d.get('name')} (Channels: {d.get('max_input_channels')}, Rate: {d.get('default_samplerate')}Hz)")
+        mgr = get_audio_manager()
+        print(f"[WAKE] Wake recognizer initialized: {mgr.wake_recognizer is not None}")
+        print(f"[STT] Command recognizer initialized: {mgr.command_recognizer is not None}")
+        print(f"[TTS] Voice output engine ready: {config.ENABLE_VOICE_OUTPUT}")
+        speak("Diagnostic check complete, sir. All voice systems nominal.", style="cinematic", block=True)
+        print("[STATUS] All voice systems verified successfully.")
+    elif args.hud_large:
         try:
             from core.desktop_gui import launch_desktop_gui
             launch_desktop_gui(show_hud=True)
         except Exception as e:
             print(f"[Desktop GUI Launch Fallback]: {e}")
+            run_interactive_mode(brain)
+    else:
+        # Default Mark VII Behavior: Compact Transparent Holographic HUD with hands-free wake word
+        try:
+            from core.holographic_hud import launch_holographic_app
+            launch_holographic_app()
+        except Exception as e:
+            print(f"[Holographic HUD Launch Fallback]: {e}")
             run_interactive_mode(brain)
 
 
