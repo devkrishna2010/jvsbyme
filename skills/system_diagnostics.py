@@ -12,18 +12,32 @@ Delivered with authentic Tony Stark HUD status reporting.
 import os
 import sys
 import datetime
+import os
+import sys
+import time
+import datetime
 import psutil
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 from core.responses import get_response
 import config
 
+_last_net_time: float = 0.0
+_last_net_bytes_sent: int = 0
+_last_net_bytes_recv: int = 0
+_cpu_history: List[float] = [15.0] * 20
+
 
 def get_system_telemetry() -> Dict[str, Any]:
-    """Gathers real-time machine hardware metrics."""
+    """Gathers real-time machine hardware metrics including Network I/O rate and CPU trend."""
+    global _last_net_time, _last_net_bytes_sent, _last_net_bytes_recv, _cpu_history
+
     # CPU
-    cpu_percent = psutil.cpu_percent(interval=0.1)
+    cpu_percent = psutil.cpu_percent(interval=0.05)
     cpu_count = psutil.cpu_count(logical=True)
+    _cpu_history.append(cpu_percent)
+    if len(_cpu_history) > 30:
+        _cpu_history.pop(0)
 
     # RAM
     vmem = psutil.virtual_memory()
@@ -36,6 +50,22 @@ def get_system_telemetry() -> Dict[str, Any]:
     disk_total_gb = round(disk.total / (1024 ** 3), 1)
     disk_free_gb = round(disk.free / (1024 ** 3), 1)
     disk_percent = disk.percent
+
+    # Network I/O Rate
+    now = time.time()
+    net = psutil.net_io_counters()
+    net_sent_kbps = 0.0
+    net_recv_kbps = 0.0
+    if _last_net_time > 0:
+        dt = max(0.1, now - _last_net_time)
+        net_sent_kbps = round((net.bytes_sent - _last_net_bytes_sent) / (1024 * dt), 1)
+        net_recv_kbps = round((net.bytes_recv - _last_net_bytes_recv) / (1024 * dt), 1)
+        net_sent_kbps = max(0.0, net_sent_kbps)
+        net_recv_kbps = max(0.0, net_recv_kbps)
+
+    _last_net_time = now
+    _last_net_bytes_sent = net.bytes_sent
+    _last_net_bytes_recv = net.bytes_recv
 
     # Battery
     battery = psutil.sensors_battery()
@@ -58,12 +88,15 @@ def get_system_telemetry() -> Dict[str, Any]:
     return {
         "cpu_percent": cpu_percent,
         "cpu_count": cpu_count,
+        "cpu_history": list(_cpu_history),
         "ram_total_gb": ram_total_gb,
         "ram_used_gb": ram_used_gb,
         "ram_percent": ram_percent,
         "disk_total_gb": disk_total_gb,
         "disk_free_gb": disk_free_gb,
         "disk_percent": disk_percent,
+        "net_sent_kbps": net_sent_kbps,
+        "net_recv_kbps": net_recv_kbps,
         "battery": bat_info,
         "uptime": f"{hours} hours, {minutes} minutes",
         "process_count": p_count

@@ -131,6 +131,7 @@ class JarvisBrain:
     def __init__(self):
         self.context = ConversationContext()
         self.skill_registry: Dict[str, Callable] = {}
+        self.hud_mode_callback: Optional[Callable[[str], None]] = None
         self._register_default_skills()
 
     def _register_default_skills(self):
@@ -143,6 +144,7 @@ class JarvisBrain:
         self.skill_registry["status"] = self._handle_status
         self.skill_registry["identity"] = self._handle_identity
         self.skill_registry["mode_switch"] = self._handle_mode_switch
+        self.skill_registry["hud_mode"] = self._handle_hud_mode
         self.skill_registry["calculation"] = self._handle_calculation
         self.skill_registry["banter"] = self._handle_banter
         self.skill_registry["repeat"] = self._handle_repeat
@@ -212,6 +214,26 @@ class JarvisBrain:
 
     def _match_intent_patterns(self, low: str, raw: str) -> IntentResult:
         """Core deterministic pattern matching on normalized input."""
+
+        # HUD Holographic Interface Modes (Invisible, Minimal, Full Holographic)
+        if any(w in low for w in [
+            "hide interface", "hide hud", "hide your interface", "close hud", "close interface",
+            "invisible mode", "go invisible", "disappear", "stealth mode", "hide display", "dismiss hud"
+        ]):
+            return IntentResult("hud_mode", 0.99, {"mode": "invisible"}, raw, "cinematic")
+
+        if any(w in low for w in [
+            "minimal mode", "compact mode", "minimize interface", "minimize hud", "compact hud",
+            "small hud", "collapse hud", "reactor mode", "core mode", "minimal holographic mode", "small interface"
+        ]):
+            return IntentResult("hud_mode", 0.99, {"mode": "minimal"}, raw, "cinematic")
+
+        if any(w in low for w in [
+            "show hud", "open interface", "bring up your main interface", "activate full holographic interface",
+            "restore my hud", "restore hud", "full hud", "full interface", "holographic mode",
+            "open hud", "show interface", "bring up interface", "full holographic mode", "display hud", "expand hud"
+        ]):
+            return IntentResult("hud_mode", 0.99, {"mode": "full"}, raw, "cinematic")
 
         # 1. Mode Switching
         if any(w in low for w in ["cinematic mode", "cinema mode"]):
@@ -601,6 +623,20 @@ class JarvisBrain:
         else:
             return "Normal mode active, sir. Standard natural profile restored."
 
+    def _handle_hud_mode(self, res: IntentResult) -> str:
+        mode = res.parameters.get("mode", "full")
+        if hasattr(self, "hud_mode_callback") and self.hud_mode_callback:
+            try:
+                self.hud_mode_callback(mode)
+            except Exception as e:
+                print(f"[Brain] Error invoking hud_mode_callback: {e}")
+        if mode == "invisible":
+            return "Hiding interface, sir. All background voice and audio services remain active."
+        elif mode == "minimal":
+            return "Switching to minimal holographic core, sir."
+        else:
+            return "Activating full Mark VII holographic environment, sir."
+
     def _handle_calculation(self, res: IntentResult) -> str:
         expr = res.parameters.get("expression", "")
         # Safe math evaluation (numbers and basic arithmetic symbols only)
@@ -630,3 +666,15 @@ class JarvisBrain:
         if self.context.last_response:
             return f"{get_response('repeat')} {self.context.last_response}"
         return "I have not spoken recently, sir."
+
+
+_brain_instance: Optional[JarvisBrain] = None
+
+
+def get_brain() -> JarvisBrain:
+    """Singleton provider for JarvisBrain."""
+    global _brain_instance
+    if _brain_instance is None:
+        _brain_instance = JarvisBrain()
+    return _brain_instance
+

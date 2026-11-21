@@ -82,6 +82,7 @@ class AudioManager:
         self.on_partial_text: Optional[Callable[[str], None]] = None
         self.on_command_recognized: Optional[Callable[[str], None]] = None
         self.on_response_ready: Optional[Callable[[str, str], None]] = None
+        self.on_hud_mode_requested: Optional[Callable[[str], None]] = None
 
         # VAD & Timing Configuration
         self.silence_threshold_sec = 1.6
@@ -101,8 +102,16 @@ class AudioManager:
         self._heard_speech = False
         self._active_device_index: Optional[int] = None
         self.brain = JarvisBrain()
+        self.brain.hud_mode_callback = self._on_hud_mode_from_brain
 
         self._init_models()
+
+    def _on_hud_mode_from_brain(self, mode: str):
+        if self.on_hud_mode_requested:
+            try:
+                self.on_hud_mode_requested(mode)
+            except Exception as e:
+                print(f"[AudioManager] Error dispatching hud mode: {e}")
 
     def _init_models(self):
         """Initializes Vosk acoustic recognizers with optimized grammar constraints."""

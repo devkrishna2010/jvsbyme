@@ -186,26 +186,41 @@ class TestJarvisV2Core(unittest.TestCase):
         self.assertEqual(mgr.state, AudioState.STANDBY)
 
     def test_12_transparent_holographic_hud(self):
-        """Validates Mark VII: Iron Man Transparent Holographic HUD geometry & expansion."""
+        """Validates Mark VII: Complete Iron Man Holographic Interface & Multi-Mode Switching."""
         from PyQt5.QtWidgets import QApplication
+        from PyQt5.QtGui import QPixmap, QPainter
         from core.holographic_hud import JarvisHolographicHUD
         app = QApplication.instance() or QApplication([])
         hud = JarvisHolographicHUD()
         self.assertIsNotNone(hud)
-        self.assertEqual(hud.width(), 220)
-        self.assertEqual(hud.height(), 220)
 
-        # Test expansion to tactical panel
-        hud.expand_hud()
-        self.assertTrue(hud.is_expanded)
-        self.assertEqual(hud.width(), 520)
-        self.assertEqual(hud.height(), 360)
+        # 1. Test Mode B: Minimal Holographic Mode
+        hud.set_mode("minimal")
+        self.assertEqual(hud.current_mode, "minimal")
+        self.assertEqual(hud.width(), 240)
+        self.assertEqual(hud.height(), 240)
 
-        # Test collapse to compact reactor
-        hud.collapse_hud()
-        self.assertFalse(hud.is_expanded)
-        self.assertEqual(hud.width(), 220)
-        self.assertEqual(hud.height(), 220)
+        # 2. Test Mode C: Full Holographic Mode
+        hud.set_mode("full")
+        self.assertEqual(hud.current_mode, "full")
+        self.assertGreaterEqual(hud.width(), 1000)
+        self.assertGreaterEqual(hud.height(), 600)
+
+        # 3. Test Mode A: Invisible Background
+        hud.set_mode("invisible")
+        self.assertEqual(hud.current_mode, "invisible")
+        self.assertFalse(hud.isVisible())
+
+        # 4. Test Rendering Pipeline across both modes
+        pix = QPixmap(hud.width(), hud.height())
+        pix.fill()
+        painter = QPainter(pix)
+        hud._render_full_holographic_workspace(painter)
+        hud._render_minimal_holographic_core(painter)
+        painter.end()
+
+        # Restore to minimal
+        hud.set_mode("minimal")
         hud.audio_mgr.stop()
         hud.close()
 
