@@ -25,17 +25,12 @@ credentials.json
 token.json
 service_account.json
 
-# Vosk model and voice weights (large binaries)
-assets/voice_model/
-assets/piper/
-voice/models/jarvis/*.onnx
-voice/cache/
+# Backup archives (>100MB exceeds GitHub limits)
 memory/backups/
 *.zip
 *.tar.gz
 
 # Logs
-logs/
 *.log
 
 # IDE / OS
