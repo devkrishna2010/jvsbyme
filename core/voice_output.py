@@ -65,29 +65,34 @@ def speak(
         return ""
 
     resolved_style = style or config.DEFAULT_VOICE_STYLE
-
     tts = get_tts()
-    wav_path = tts.synthesize(
-        text=text,
-        style=resolved_style,
-        apply_effects=config.ENABLE_VOICE_DSP
-    )
 
-    def _play_worker():
+    # Fast path: check if cached already
+    cached_path = None
+    if tts.cache and tts.cache.has(text, resolved_style):
+        cached_path = tts.cache.get_path(text, resolved_style)
+
+    def _speech_worker():
         global _is_speaking
         try:
             _is_speaking = True
-            tts.play(wav_path)
+            wav_to_play = cached_path or tts.synthesize(
+                text=text,
+                style=resolved_style,
+                apply_effects=config.ENABLE_VOICE_DSP
+            )
+            tts.play(wav_to_play)
         finally:
             _is_speaking = False
 
     if block:
-        _play_worker()
+        _speech_worker()
+        return cached_path or tts.synthesize(text=text, style=resolved_style, apply_effects=config.ENABLE_VOICE_DSP)
     else:
-        t = threading.Thread(target=_play_worker, daemon=True)
+        # Truly non-blocking: synthesis & playback run entirely in background thread
+        t = threading.Thread(target=_speech_worker, daemon=True)
         t.start()
-
-    return wav_path
+        return cached_path or ""
 
 
 def request_user_input(prompt: str = "I require your input or authorization, Dev.") -> str:

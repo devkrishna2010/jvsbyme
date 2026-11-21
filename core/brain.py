@@ -148,6 +148,7 @@ class JarvisBrain:
         self.skill_registry["repeat"] = self._handle_repeat
         self.skill_registry["emotion_check"] = self._handle_emotion_check
         self.skill_registry["congratulate"] = self._handle_congratulate
+        self.skill_registry["chat"] = self._handle_chat
 
         # Phase 4 & Phase 6 Skills
         try:
@@ -318,7 +319,7 @@ class JarvisBrain:
             return IntentResult("telegram_backup", 0.95, {}, raw, "cinematic")
 
         # 13. Identity
-        if any(w in low for w in ["who are you", "what are you", "your name", "what does jarvis stand for"]):
+        if re.search(r"^(?:who are you|what are you|what is your name|your name|what does jarvis stand for)\s*(?:jarvis)?\??$", low):
             return IntentResult("identity", 0.95, {}, raw, "witty")
 
         # Barge-in / Interruption (Section 6)
@@ -354,7 +355,19 @@ class JarvisBrain:
         if any(w in low for w in ["morning brief", "daily brief", "briefing", "give me the brief"]):
             return IntentResult("morning_briefing", 0.95, {}, raw, "cinematic")
 
-        # 18. Web Search (Explicit + Natural Factual Questions)
+        # 18. Conversational Chat Engine (Boredom, Philosophy, Companionship, Lore, Trivia)
+        try:
+            from core.chat_engine import get_chat_engine
+            chat_match = get_chat_engine().handle_conversational_query(raw, self.context)
+            if not chat_match and low != raw.lower():
+                chat_match = get_chat_engine().handle_conversational_query(low, self.context)
+            if chat_match:
+                chat_text, chat_style = chat_match
+                return IntentResult("chat", 0.95, {"response": chat_text, "style": chat_style}, raw, chat_style)
+        except Exception:
+            pass
+
+        # 19. Web Search (Explicit + Natural Factual Questions)
         search_match = re.search(r"\b(?:search(?: the web for| for)?|google|look up|find info on)\s+(.+)", raw, re.IGNORECASE)
         if search_match:
             return IntentResult("web_search", 0.90, {"query": search_match.group(1).strip()}, raw, "normal")
@@ -441,7 +454,12 @@ class JarvisBrain:
             elif intent_res.intent == "shutdown":
                 response_text = get_response("shutdown")
             elif intent_res.intent == "unknown":
-                response_text = get_response("unknown")
+                from core.chat_engine import get_chat_engine
+                chat_match = get_chat_engine().handle_conversational_query(query, self.context)
+                if chat_match:
+                    response_text, suggested_style = chat_match
+                else:
+                    response_text = get_response("unknown")
             else:
                 response_text = f"I have recognized the command for {intent_res.intent}, sir."
         except Exception as e:
@@ -540,6 +558,9 @@ class JarvisBrain:
             "self-diagnostic audits; and automated backups to Telegram. "
             "Simply ask, and I shall do my best, sir."
         )
+
+    def _handle_chat(self, res: IntentResult) -> str:
+        return res.parameters.get("response", "I am here, sir. At your disposal.")
 
     def _handle_status(self, res: IntentResult) -> str:
         return get_response("system_status")

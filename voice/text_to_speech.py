@@ -96,38 +96,19 @@ class JarvisTTS:
         if self.cache and not output_file and self.cache.has(text, profile.name):
             return self.cache.get_path(text, profile.name)
 
-        collected_audio: List[np.ndarray] = []
-        sample_rate = 22050
+        # Single-pass synthesis: eliminates repeated subprocess spawn latency.
+        # Piper natively parses punctuation breaks and applies sentence silence in a single pass.
+        combined_mono, sample_rate = self._synthesize_single_phrase(text, profile)
 
-        # Sequential sentence synthesis to preserve RAM
-        for idx, sentence in enumerate(sentences):
-            if not sentence.strip():
-                continue
-            chunk_data, sr = self._synthesize_single_phrase(sentence, profile)
-            sample_rate = sr
-
-            # Smooth 4ms micro fade-in/out to prevent boundary clicks
-            fade_len = int(0.004 * sr)
-            if len(chunk_data) > fade_len * 2:
-                chunk_f = chunk_data.astype(np.float32)
-                f_in = np.linspace(0.0, 1.0, fade_len)
-                f_out = np.linspace(1.0, 0.0, fade_len)
-                chunk_f[:fade_len] *= f_in
-                chunk_f[-fade_len:] *= f_out
-                chunk_data = chunk_f.astype(chunk_data.dtype)
-
-            collected_audio.append(chunk_data)
-
-            # Insert configurable sentence silence pause between parts
-            if idx < len(sentences) - 1 and profile.sentence_silence > 0:
-                silence_samples = int(profile.sentence_silence * sample_rate)
-                silence = np.zeros(silence_samples, dtype=chunk_data.dtype)
-                collected_audio.append(silence)
-
-        if not collected_audio:
-            raise ValueError("No speech could be generated from the input text.")
-
-        combined_mono = np.concatenate(collected_audio)
+        # Smooth 4ms micro fade-in/out to prevent boundary clicks
+        fade_len = int(0.004 * sample_rate)
+        if len(combined_mono) > fade_len * 2:
+            chunk_f = combined_mono.astype(np.float32)
+            f_in = np.linspace(0.0, 1.0, fade_len)
+            f_out = np.linspace(1.0, 0.0, fade_len)
+            chunk_f[:fade_len] *= f_in
+            chunk_f[-fade_len:] *= f_out
+            combined_mono = chunk_f.astype(combined_mono.dtype)
 
         # Audio processing (EQ, subtle surround ambience, limiter)
         if apply_effects:
@@ -152,7 +133,6 @@ class JarvisTTS:
             out_path = self.cache.put(text, profile.name, out_path)
 
         # Release memory buffers explicitly
-        del collected_audio
         del combined_mono
 
         return out_path
