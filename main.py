@@ -124,6 +124,7 @@ def main():
     parser.add_argument("--status", action="store_true", help="Execute immediate diagnostic telemetry check")
     parser.add_argument("--brief", action="store_true", help="Deliver daily intelligence briefing with live weather")
     parser.add_argument("--flaws", action="store_true", help="Run autonomous self-diagnostic flaw audit and save report")
+    parser.add_argument("--companion", action="store_true", help="Launch directly into lightweight floating desktop companion")
     args = parser.parse_args()
 
     # Passcode 2681 Telegram Listener & Saturday Backup check active across all modes
@@ -154,11 +155,18 @@ def main():
         res = brain.process_query("run self diagnostic flaw audit")
         print(f"[{config.JARVIS_NAME}]: {res[0]}")
         speak(res[0], style=res[1], block=True)
+    elif args.companion:
+        try:
+            from core.floating_companion import launch_floating_companion
+            launch_floating_companion(show_hud=False)
+        except Exception as e:
+            print(f"[Floating Companion Launch Fallback]: {e}")
+            run_interactive_mode(brain)
     else:
         # Default V2 behavior: Launch Native Windows Desktop Application
         try:
             from core.desktop_gui import launch_desktop_gui
-            launch_desktop_gui()
+            launch_desktop_gui(show_hud=True)
         except Exception as e:
             print(f"[Desktop GUI Launch Fallback]: {e}")
             run_interactive_mode(brain)

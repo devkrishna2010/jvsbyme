@@ -288,7 +288,7 @@ class JarvisBrain:
             return IntentResult("capabilities", 0.95, {}, raw, "cinematic")
 
         # 8. Weather & Environmental Sensors
-        if re.search(r"\b(weather|temperature|forecast|climate|how('s| is) it outside|outside temp)\b", low):
+        if re.search(r"\b(weather|temperature|forecast|climate|how('s| is) it outside|outside temp|raining|rain outside|is it raining|will it rain|snowing|umbrella|sunny outside)\b", low):
             loc_match = re.search(r"\b(?:in|for|at)\s+([a-zA-Z\s]+)", raw, re.IGNORECASE)
             loc = loc_match.group(1).strip() if loc_match else None
             return IntentResult("weather", 0.94, {"location": loc}, raw, "cinematic")
@@ -368,15 +368,27 @@ class JarvisBrain:
             pass
 
         # 19. Web Search (Explicit + Natural Factual Questions)
-        search_match = re.search(r"\b(?:search(?: the web for| for)?|google|look up|find info on)\s+(.+)", raw, re.IGNORECASE)
+        search_match = re.search(
+            r"\b(?:search(?: the web for| for)?|google|look up|find info on|find information on|browse for)\s+(.+)",
+            raw, re.IGNORECASE
+        )
         if search_match:
             return IntentResult("web_search", 0.90, {"query": search_match.group(1).strip()}, raw, "normal")
 
-        factual_match = re.search(r"\b(?:tell me about|who is|explain|what(?:'s| is) happening in|how does)\s+(.+)", raw, re.IGNORECASE)
-        if factual_match:
-            return IntentResult("web_search", 0.92, {"query": factual_match.group(1).strip().rstrip("?")}, raw, "cinematic")
+        factual_match = re.search(
+            r"\b(?:tell me about|who (?:is|was|were|are|created|built|invented|discovered|wrote)|"
+            r"explain|what(?:'s| is| was| were| are) happening in|"
+            r"why (?:is|was|were|are|do|does|did)|"
+            r"when (?:is|was|were|did|will)|"
+            r"where (?:is|was|were|are|can i find)|"
+            r"which (?:is|are|was|were|country|city|state|animal|planet|car)|"
+            r"how (?:does|do|did|is|was|are|can|many|much|far|old|tall|long))\s+(.+)",
+            raw, re.IGNORECASE
+        )
+        if factual_match and not any(k in low for k in ["how are you", "how's it going", "what is my name", "what time", "what date"]):
+            return IntentResult("web_search", 0.92, {"query": raw.rstrip("?")}, raw, "cinematic")
 
-        what_is_match = re.search(r"^(?:what is|what's|what are)\s+([a-zA-Z0-9\s]{3,})\??$", raw, re.IGNORECASE)
+        what_is_match = re.search(r"^(?:what is|what's|what was|what are|what were)\s+([a-zA-Z0-9\s]{3,})\??$", raw, re.IGNORECASE)
         if what_is_match and not any(k in low for k in ["my name", "time", "date", "status", "weather", "today"]):
             return IntentResult("web_search", 0.90, {"query": what_is_match.group(1).strip()}, raw, "cinematic")
 
@@ -414,6 +426,17 @@ class JarvisBrain:
         # Compliments / gratitude — broadened
         if re.search(r"\b(thank you|thanks|good (job|work|one)|well done|great (job|work)|nice (work|job|one)|brilliant|amazing|awesome|perfect|excellent)\b", low):
             return IntentResult("banter", 0.92, {"type": "compliment"}, raw, "witty")
+
+        # 23. General Interrogative Fallback -> Web Search
+        # Any question or query that wasn't claimed by earlier skills should be researched
+        # rather than rejected with "Could you clarify, sir?"
+        if (
+            re.search(r"^(?:who|what|where|when|why|how|which|can you tell me|do you know|is it|are there|does|did|will|would|can)\b", low)
+            or raw.endswith("?")
+        ):
+            words = low.split()
+            if len(words) >= 3 and not any(w in low for w in ["open", "launch", "volume", "shutdown", "exit", "focus", "protocol"]):
+                return IntentResult("web_search", 0.85, {"query": raw.rstrip("?")}, raw, "cinematic")
 
         # Fallback Unknown
         return IntentResult("unknown", 0.30, {}, raw, "normal")

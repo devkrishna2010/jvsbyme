@@ -876,17 +876,21 @@ class JarvisDesktopWindow(QMainWindow):
         self.add_message(f"Reminder #{rem_id} successfully cancelled, sir.", is_user=False)
 
 
+    def closeEvent(self, event):
+        """Hides HUD to floating companion instead of destroying app."""
+        if hasattr(self, "companion") and self.companion:
+            event.ignore()
+            self.hide()
+            return
+        super().closeEvent(event)
+
 # ----------------------------------------------------------------------
 # ENTRY POINT
 # ----------------------------------------------------------------------
-def launch_desktop_gui():
-    """Launches the native PyQt5 Desktop Window."""
-    app = QApplication.instance()
-    if not app:
-        app = QApplication(sys.argv)
-    window = JarvisDesktopWindow()
-    window.show()
-    return app.exec_()
+def launch_desktop_gui(show_hud: bool = True):
+    """Launches the complete J.A.R.V.I.S. V2 interface with floating companion."""
+    from core.floating_companion import launch_floating_companion
+    return launch_floating_companion(show_hud=show_hud)
 
 
 if __name__ == "__main__":

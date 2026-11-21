@@ -113,17 +113,12 @@ def research_topic(query: str) -> Dict[str, Any]:
     """
     Autonomous multi-source research pipeline:
     1. Checks connection
-    2. Queries Wikipedia for core encyclopedic entities (e.g. Neymar, Quantum Computing)
-    3. Queries DuckDuckGo for general / current events and explanations
-    4. Combines results into a polished J.A.R.V.I.S. briefing
+    2. Identifies question type (explanatory 'why' vs factual entity)
+    3. Queries Wikipedia for core encyclopedic entities (e.g. Neymar, Quantum Computing, Albert Einstein)
+    4. Queries DuckDuckGo for general / current events and explanations
+    5. Combines results into a polished J.A.R.V.I.S. briefing
     """
-    clean_q = query.strip()
-    # Strip conversational prefixes
-    for prefix in ["tell me about", "who is", "what is", "what's", "explain", "how does", "what's happening in", "search for"]:
-        if clean_q.lower().startswith(prefix):
-            clean_q = clean_q[len(prefix):].strip()
-            break
-    clean_q = clean_q.rstrip("?")
+    clean_q = query.strip().rstrip("?").strip()
 
     if not check_internet_connection():
         return {
@@ -133,17 +128,56 @@ def research_topic(query: str) -> Dict[str, Any]:
             "source": ""
         }
 
-    # First attempt: Encyclopedic extract
-    wiki_res = query_wikipedia(clean_q)
-    if wiki_res:
-        return {
-            "success": True,
-            "speech": f"According to current archives on {wiki_res['title']}: {wiki_res['summary']}",
-            "url": wiki_res["url"],
-            "source": wiki_res["source"]
-        }
+    # Extract substantive entity / subject for Wikipedia REST lookup
+    wiki_topic = clean_q
+    prefixes = [
+        "tell me about", "who was", "who were", "who is", "who are",
+        "who created", "who built", "who invented", "who discovered",
+        "what was", "what were", "what is", "what's", "what are",
+        "why was", "why were", "why is", "why are", "why do", "why does", "why did",
+        "when was", "when did", "when were", "when is", "when will",
+        "where was", "where were", "where is", "where are", "where can i find",
+        "how does", "how do", "how was", "how were", "how did", "how is", "how can",
+        "how many", "how much", "how far is", "how old is", "how tall is",
+        "which country", "which city", "which is", "which are",
+        "explain", "what's happening in", "search for", "search the web for",
+        "search", "google", "look up", "find info on", "find information on",
+        "can you tell me about", "can you tell me", "do you know about", "do you know"
+    ]
+    for prefix in prefixes:
+        if wiki_topic.lower().startswith(prefix):
+            wiki_topic = wiki_topic[len(prefix):].strip()
+            break
 
-    # Second attempt: DuckDuckGo search
+    # Strip leading articles for Wikipedia entity lookup
+    wiki_entity = re.sub(r"^(?:the|a|an)\s+", "", wiki_topic, flags=re.IGNORECASE).strip()
+
+    is_why_question = clean_q.lower().startswith("why ") or " why " in clean_q.lower()
+
+    # For explanatory 'why' inquiries, DuckDuckGo provides richer explanations than static wiki titles
+    if is_why_question:
+        ddg_res = search_duckduckgo(clean_q, max_results=2)
+        if ddg_res:
+            top = ddg_res[0]
+            return {
+                "success": True,
+                "speech": f"According to scientific archives regarding '{clean_q}': {top['summary']}",
+                "url": top["url"],
+                "source": top["source"]
+            }
+
+    # First attempt for factual entities: Encyclopedic Wikipedia extract
+    if wiki_entity:
+        wiki_res = query_wikipedia(wiki_entity)
+        if wiki_res:
+            return {
+                "success": True,
+                "speech": f"According to current archives on {wiki_res['title']}: {wiki_res['summary']}",
+                "url": wiki_res["url"],
+                "source": wiki_res["source"]
+            }
+
+    # Second attempt: DuckDuckGo search on full query
     ddg_res = search_duckduckgo(clean_q, max_results=2)
     if ddg_res:
         top = ddg_res[0]
@@ -153,6 +187,18 @@ def research_topic(query: str) -> Dict[str, Any]:
             "url": top["url"],
             "source": top["source"]
         }
+
+    # Third attempt: DuckDuckGo on stripped topic
+    if wiki_topic and wiki_topic != clean_q:
+        ddg_res2 = search_duckduckgo(wiki_topic, max_results=1)
+        if ddg_res2:
+            top = ddg_res2[0]
+            return {
+                "success": True,
+                "speech": f"My research into '{wiki_topic}' reveals: {top['summary']}",
+                "url": top["url"],
+                "source": top["source"]
+            }
 
     return {
         "success": False,

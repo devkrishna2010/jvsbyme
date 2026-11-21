@@ -138,6 +138,38 @@ class TestJarvisV2Core(unittest.TestCase):
         self.assertTrue(win.table_rem.columnCount() == 3)
         win.close()
 
+    def test_09_floating_companion_widget(self):
+        """Validates Phase 5: Stark Arc Reactor Floating Desktop Companion."""
+        from PyQt5.QtWidgets import QApplication
+        from core.floating_companion import JarvisFloatingCompanion, save_companion_position, load_saved_position
+        app = QApplication.instance() or QApplication([])
+        companion = JarvisFloatingCompanion()
+        self.assertIsNotNone(companion)
+        self.assertEqual(companion.width(), 92)
+        self.assertEqual(companion.height(), 92)
+
+        # Test position save & reload
+        save_companion_position(150, 250, avoidance=True)
+        pos = load_saved_position()
+        self.assertEqual(pos.get("x"), 150)
+        self.assertEqual(pos.get("y"), 250)
+        self.assertTrue(pos.get("cursor_avoidance"))
+        companion.close()
+
+    def test_10_broad_question_answering(self):
+        """Validates Phase 2 & 3: Natural interrogatives (why/when/where/how/who/weather)."""
+        queries = [
+            ("why is the sky blue", "web_search"),
+            ("who was albert einstein", "web_search"),
+            ("where is paris", "web_search"),
+            ("when did world war 2 end", "web_search"),
+            ("how does an engine work", "web_search"),
+            ("is it raining outside", "weather"),
+        ]
+        for q, expected_intent in queries:
+            intent_res = self.brain.parse_intent(q)
+            self.assertEqual(intent_res.intent, expected_intent, f"Query '{q}' failed to parse as '{expected_intent}' (got '{intent_res.intent}')")
+
 
 if __name__ == "__main__":
     unittest.main()
