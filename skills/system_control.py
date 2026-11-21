@@ -104,6 +104,8 @@ KNOWN_APPS: Dict[str, str] = {
     "netflix": "https://www.netflix.com",
     # URLs — opened in default browser
     "youtube": "https://www.youtube.com",
+    "yt": "https://www.youtube.com",
+    "utube": "https://www.youtube.com",
     "google": "https://www.google.com",
     "gmail": "https://mail.google.com",
     "github": "https://www.github.com",
@@ -193,6 +195,23 @@ def launch_application(app_name: str) -> Tuple[bool, str]:
     for noise in [" please", " now", " up", " for me"]:
         if clean_name.endswith(noise):
             clean_name = clean_name[: -len(noise)].strip()
+
+    # Normalization for common app typos and abbreviations
+    alias_map = {
+        "yt": "youtube",
+        "utube": "youtube",
+        "youtub": "youtube",
+        "clc": "calculator",
+        "clcltr": "calculator",
+        "cal": "calculator",
+        "calclatr": "calculator",
+        "calculater": "calculator",
+        "notepd": "notepad",
+        "spotfy": "spotify",
+        "spotif": "spotify",
+    }
+    if clean_name in alias_map:
+        clean_name = alias_map[clean_name]
 
     target = KNOWN_APPS.get(clean_name, clean_name)
 

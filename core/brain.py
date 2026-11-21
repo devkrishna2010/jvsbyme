@@ -19,11 +19,92 @@ V2 Repairs (Phase 2):
 import re
 import time
 import datetime
+import difflib
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Tuple, Callable
 
 from core.responses import get_response
 import config
+
+# Slang, typo, and phonetic mapping to canonical keywords
+SLANG_TYPO_MAP: Dict[str, str] = {
+    # Greetings & Addresses
+    "hy": "hey", "hyy": "hey", "he": "hey", "hii": "hi", "hiii": "hi", "heya": "hey", "hye": "hey",
+    "bruh": "bro", "bruhh": "bro", "brah": "bro", "broda": "bro", "bhai": "bro", "dude": "bro",
+    # Question words & Pronouns
+    "wat": "what", "wht": "what", "wt": "what", "wats": "what is", "whats": "what is", "wts": "what is",
+    "hw": "how", "hwo": "how", "hws": "how is", "whr": "where", "wen": "when",
+    "u": "you", "ya": "you", "ur": "your", "urs": "yours", "r": "are",
+    # Courtesies & banters
+    "plz": "please", "pls": "please", "plez": "please",
+    "thx": "thanks", "thnx": "thanks", "thanx": "thanks", "ty": "thank you", "tysm": "thank you so much",
+    "sry": "sorry", "k": "ok", "kk": "ok",
+    # Actions & Verbs
+    "opn": "open", "opnd": "open", "lnch": "launch", "strt": "start",
+    "sho": "show", "shw": "show", "tl": "tell", "tll": "tell",
+    "remnd": "remind", "rmnd": "remind",
+    "clc": "calculator", "cal": "calculator", "calclatr": "calculator", "calculater": "calculator",
+    # Media & Apps
+    "yt": "youtube", "utube": "youtube", "youtub": "youtube",
+    "gogl": "google", "googl": "google", "goggl": "google",
+    "spotfy": "spotify", "spotif": "spotify",
+    "dscrd": "discord", "discor": "discord",
+    "tg": "telegram", "telegrm": "telegram",
+    "watsapp": "whatsapp", "wapp": "whatsapp",
+    "notepd": "notepad",
+    # System Controls
+    "vol": "volume", "volum": "volume", "vlm": "volume", "vlume": "volume",
+    "inc": "increase", "incres": "increase", "increse": "increase",
+    "dec": "decrease", "decres": "decrease", "decrese": "decrease",
+    "mut": "mute", "scrn": "screen", "scrnshot": "screenshot", "ss": "screenshot",
+    # Topics & Telemetry
+    "wether": "weather", "weathr": "weather", "temprature": "temperature", "temp": "temperature",
+    "tme": "time", "dte": "date", "stts": "status", "stat": "status", "diag": "diagnostics",
+    "tday": "today", "2day": "today", "tmrw": "tomorrow", "2mrw": "tomorrow",
+}
+
+CANONICAL_KEYWORDS: List[str] = [
+    "calculator", "youtube", "chrome", "spotify", "notepad", "discord", "telegram",
+    "weather", "temperature", "diagnostics", "status", "telemetry", "volume",
+    "screenshot", "computer", "shutdown", "briefing", "reminder", "calculate",
+    "increase", "decrease", "louder", "quieter", "silence", "protocol"
+]
+
+
+def normalize_query(text: str) -> str:
+    """
+    Normalizes typos, elongated character spam (e.g. hyyy -> hey, bruuuhhhhh -> bro),
+    and common colloquial slang expressions.
+    """
+    raw = text.strip()
+    low = raw.lower().strip()
+    low = re.sub(r"[!?.,;:]+$", "", low).strip()
+    # Collapse 3 or more repeated letters to 1 (e.g. hyyy -> hy, bruuuhhhhh -> bruh, heyyyy -> hey)
+    low = re.sub(r"([a-zA-Z])\1{2,}", r"\1", low)
+    words = low.split()
+    norm_words = []
+    for w in words:
+        if w in SLANG_TYPO_MAP:
+            norm_words.append(SLANG_TYPO_MAP[w])
+        else:
+            if len(w) >= 4:
+                matches = difflib.get_close_matches(w, CANONICAL_KEYWORDS, n=1, cutoff=0.74)
+                if matches:
+                    norm_words.append(matches[0])
+                    continue
+            norm_words.append(w)
+    return " ".join(norm_words)
+
+
+def is_pure_greeting(norm: str) -> bool:
+    """Checks if the query consists purely of greeting words and informal address tokens."""
+    words = norm.split()
+    salutations = {
+        "hey", "hi", "hello", "hiya", "howdy", "yo", "sup", "bro", "jarvis",
+        "there", "good", "morning", "afternoon", "evening", "day", "wassup",
+        "buddy", "man"
+    }
+    return len(words) > 0 and all(w in salutations for w in words)
 
 
 @dataclass
@@ -108,13 +189,28 @@ class JarvisBrain:
     def parse_intent(self, text: str) -> IntentResult:
         """
         Parses raw text and extracts intent, confidence, and parameters.
-        Zero memory overhead; deterministic and accurate.
+        Normalizes slang, typos, and elongated characters before routing.
         """
         raw = text.strip()
-        low = raw.lower().strip()
+        norm = normalize_query(raw)
 
-        # Normalize common whitespace / punctuation noise
-        low = re.sub(r"[!?.]+$", "", low).strip()
+        # 1. Pure greetings (e.g. 'hyyy', 'bruuuhhhhh', 'hey bro', 'yo jarvis')
+        if is_pure_greeting(norm):
+            return IntentResult("greeting", 0.92, {}, raw, "cinematic")
+
+        # 2. Check for leading salutations and strip to reveal actionable commands
+        # e.g. "bruuuhhhhh open clcltr" -> "open calculator"
+        stripped = re.sub(r"^(?:hey|hi|hello|hiya|howdy|yo|sup|bro|jarvis|please|pls|sir)\s+", "", norm).strip()
+        if stripped and stripped != norm:
+            res = self._match_intent_patterns(stripped, raw)
+            if res.intent != "unknown":
+                return res
+
+        # 3. Standard intent matching on normalized query
+        return self._match_intent_patterns(norm, raw)
+
+    def _match_intent_patterns(self, low: str, raw: str) -> IntentResult:
+        """Core deterministic pattern matching on normalized input."""
 
         # 1. Mode Switching
         if any(w in low for w in ["cinematic mode", "cinema mode"]):
@@ -286,7 +382,7 @@ class JarvisBrain:
             return IntentResult("system_control", 0.92, {"action": "screenshot"}, raw, "normal")
 
         # 20. Application Launch — after volume/lock to avoid conflicts
-        app_match = re.search(r"\b(?:open|launch|start|run|load)\s+([a-zA-Z0-9][a-zA-Z0-9\s]{1,30})", raw, re.IGNORECASE)
+        app_match = re.search(r"\b(?:open|launch|start|run|load)\s+([a-zA-Z0-9][a-zA-Z0-9\s]{1,30})", low, re.IGNORECASE)
         if app_match:
             app_candidate = app_match.group(1).strip()
             # Exclude vague words that shouldn't map to apps
